@@ -1,0 +1,11 @@
+RewriteEngine On
+
+# Some hosts strip the Authorization header before PHP sees it — re-add it
+RewriteCond %{HTTP:Authorization} ^(.*)
+RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Route /api/<anything> to api/index.php, passing the path via ?_route=
+# (query-string routing, not PATH_INFO — more reliable across Apache/LiteSpeed configs)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^api/(.*)$ api/index.php?_route=$1 [QSA,L]

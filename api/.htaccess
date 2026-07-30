@@ -1,0 +1,9 @@
+# Block direct web access to all PHP files in this folder except index.php and seed.php.
+# (config.php holds DB credentials; lib/ and routes/ are included by index.php, not hit directly.)
+# Delete seed.php after running it once — see README step 5 — its access stays open until then.
+<FilesMatch "\.php$">
+  Require all denied
+</FilesMatch>
+<FilesMatch "^(index|seed)\.php$">
+  Require all granted
+</FilesMatch>
