@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Fork POS</title>
+  <link rel="stylesheet" href="/assets/css/styles.css" />
+</head>
+<body>
+  <!-- Login -->
+  <div id="login" class="login-wrap">
+    <div class="login-card">
+      <div class="brand"><span class="logo">🍽️</span><h1>Fork POS</h1></div>
+      <p class="muted">Sign in to your terminal</p>
+      <input id="loginUser" placeholder="Username" autocomplete="username" />
+      <input id="loginPass" type="password" placeholder="Password" autocomplete="current-password" />
+      <button id="loginBtn" class="btn primary block">Sign In</button>
+      <div id="loginErr" class="err"></div>
+      <div class="hint muted">Demo: admin / admin123</div>
+    </div>
+  </div>
+
+  <!-- App -->
+  <div id="app" class="app hidden">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand small"><span class="logo">🍽️</span><span class="bname">Fork POS</span></div>
+      <nav id="nav"></nav>
+      <div class="sidebar-foot">
+        <button id="themeBtn" class="btn ghost">🌓 Theme</button>
+        <button id="clockBtn" class="btn ghost">🕐 Clock</button>
+        <button id="logoutBtn" class="btn ghost danger">🚪 Logout</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button id="menuToggle" class="btn ghost only-mobile">☰</button>
+        <h2 id="pageTitle">Dashboard</h2>
+        <div class="topbar-right">
+          <span id="userChip" class="chip"></span>
+        </div>
+      </header>
+      <section id="view" class="view"></section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <div id="modal" class="modal-wrap hidden"><div class="modal" id="modalBox"></div></div>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/ui.js"></script>
+  <script src="/assets/js/app.js"></script>
+</body>
+</html>
