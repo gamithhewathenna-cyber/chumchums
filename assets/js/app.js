@@ -285,6 +285,8 @@ function renderCart() {
   foot.append(el('button', { class: 'btn primary block', style: 'margin-top:10px',
     onClick: sendOrder }, 'Send to Kitchen'));
   foot.append(el('button', { class: 'btn block', style: 'margin-top:6px',
+    onClick: payFirstAndSend }, '💳 Pay First, Then Send'));
+  foot.append(el('button', { class: 'btn block', style: 'margin-top:6px',
     onClick: () => { cart = []; renderCart(); } }, 'Clear'));
 }
 async function sendOrder() {
@@ -293,6 +295,12 @@ async function sendOrder() {
   await API.post(`/orders/${order.id}/send-kitchen`);
   toast('Order ' + order.code + ' sent');
   cart = []; renderCart();
+}
+async function payFirstAndSend() {
+  if (!cart.length) return toast('Cart is empty');
+  const order = await API.post('/orders', { type: cartType, table_id: cartTable, items: cart, hold: true });
+  cart = []; renderCart();
+  payOrder(order.id, true);
 }
 
 // ================= ORDERS =================
@@ -328,6 +336,8 @@ async function viewOrder(id) {
   c.append(t, el('p', { style: 'margin-top:10px' }, `Total: ${money(o.total)} · ${o.type} · `, statusBadge(o.status)));
   const acts = [{ label: 'Close', onClick: closeModal }];
   if (o.paid) acts.push({ label: '🖨️ Print Receipt', onClick: () => printReceipt(o) });
+  if (o.kitchen_status === 'held')
+    acts.push({ label: 'Send to Kitchen', onClick: async () => { await API.post(`/orders/${id}/send-kitchen`); closeModal(); toast('Sent to kitchen'); go('orders'); } });
   if (!o.paid && o.status !== 'cancelled') acts.push({ label: 'Pay', primary: true, onClick: () => { closeModal(); payOrder(id); } });
   modal('Order ' + o.code, c, acts);
 }
@@ -360,28 +370,29 @@ async function printReceipt(o) {
   setTimeout(() => window.print(), 50);
 }
 
-async function payOrder(id) {
+async function payOrder(id, sendToKitchenAfter = false) {
   const o = await API.get('/orders/' + id);
   const c = el('div');
   c.innerHTML = `<div class="tot-row big"><span>Amount Due</span><span>${money(o.total)}</span></div>`;
+  if (sendToKitchenAfter) c.append(el('p', { class: 'muted' }, 'This order will be sent to the kitchen once payment is charged.'));
   const methodSel = el('select'); ['cash','card','qr'].forEach(m => methodSel.append(el('option', { value: m }, m.toUpperCase())));
   const disc = el('input', { type: 'number', placeholder: '0', value: o.discount || 0 });
   const tip = el('input', { type: 'number', placeholder: '0', value: o.tip || 0 });
   c.append(el('label', {}, 'Payment Method'), methodSel,
     el('label', {}, 'Discount'), disc, el('label', {}, 'Tip'), tip);
-  modal('Take Payment', c, [
-    { label: 'Cancel', onClick: closeModal },
-    { label: 'Refund', danger: true, onClick: async () => { await API.post('/payments/refund', { order_id: id, amount: o.total }); closeModal(); toast('Refunded'); go('orders'); } },
-    { label: 'Charge', primary: true, onClick: async () => {
-      const total = Math.max(0, o.subtotal - Number(disc.value)) + Number(tip.value);
-      await API.post('/payments', { order_id: id, method: methodSel.value, amount: total,
-        discount: Number(disc.value), tip: Number(tip.value), close: true });
-      toast('Payment complete'); go('orders');
-      const paid = await API.get('/orders/' + id);
-      modal('Payment Complete', el('p', {}, `Order ${paid.code} · ${money(paid.total)} paid.`),
-        [{ label: 'Close', onClick: closeModal }, { label: '🖨️ Print Receipt', primary: true, onClick: () => printReceipt(paid) }]);
-    } }
-  ]);
+  const acts = [{ label: 'Cancel', onClick: closeModal }];
+  if (!sendToKitchenAfter) acts.push({ label: 'Refund', danger: true, onClick: async () => { await API.post('/payments/refund', { order_id: id, amount: o.total }); closeModal(); toast('Refunded'); go('orders'); } });
+  acts.push({ label: sendToKitchenAfter ? 'Charge & Send to Kitchen' : 'Charge', primary: true, onClick: async () => {
+    const total = Math.max(0, o.subtotal - Number(disc.value)) + Number(tip.value);
+    await API.post('/payments', { order_id: id, method: methodSel.value, amount: total,
+      discount: Number(disc.value), tip: Number(tip.value), close: true });
+    if (sendToKitchenAfter) await API.post(`/orders/${id}/send-kitchen`);
+    toast(sendToKitchenAfter ? 'Paid and sent to kitchen' : 'Payment complete'); go('orders');
+    const paid = await API.get('/orders/' + id);
+    modal('Payment Complete', el('p', {}, `Order ${paid.code} · ${money(paid.total)} paid.`),
+      [{ label: 'Close', onClick: closeModal }, { label: '🖨️ Print Receipt', primary: true, onClick: () => printReceipt(paid) }]);
+  } });
+  modal('Take Payment', c, acts);
 }
 
 // ================= ONLINE ORDERS =================

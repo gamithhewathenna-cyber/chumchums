@@ -44,9 +44,12 @@ if ($sub === '' && $method === 'GET') {
 if ($sub === '' && $method === 'POST') {
   $u = require_auth();
   $tid = inp('table_id') ?: null;
-  $oid = insert("INSERT INTO orders (code,type,table_id,customer_id,waiter_id,notes)
-    VALUES (?,?,?,?,?,?)", [next_code(), inp('type','dine-in'), $tid,
-    inp('customer_id') ?: null, $u['id'], inp('notes','')]);
+  // "hold" keeps the order out of the kitchen queue until send-kitchen is called explicitly —
+  // used when payment must be taken before the order is fired (see /orders/:id/send-kitchen)
+  $kitchenStatus = inp('hold') ? 'held' : 'new';
+  $oid = insert("INSERT INTO orders (code,type,table_id,customer_id,waiter_id,notes,kitchen_status)
+    VALUES (?,?,?,?,?,?,?)", [next_code(), inp('type','dine-in'), $tid,
+    inp('customer_id') ?: null, $u['id'], inp('notes',''), $kitchenStatus]);
   foreach (inp('items', []) as $i) {
     insert("INSERT INTO order_items (order_id,menu_item_id,name,qty,price,modifiers,notes)
       VALUES (?,?,?,?,?,?,?)", [$oid, $i['menu_item_id'] ?? null, $i['name'],
