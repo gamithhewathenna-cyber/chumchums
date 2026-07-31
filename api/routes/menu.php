@@ -47,9 +47,10 @@ if ($sub === 'items') {
 
   if ($method === 'POST' && !$id) {
     require_role(['admin','manager']);
-    $nid = insert("INSERT INTO menu_items (category_id,name,description,price,image,variations,addons,is_combo)
-      VALUES (?,?,?,?,?,?,?,?)", [
+    $nid = insert("INSERT INTO menu_items (category_id,name,description,price,image,show_online,variations,addons,is_combo)
+      VALUES (?,?,?,?,?,?,?,?,?)", [
       inp('category_id'), inp('name'), inp('description',''), inp('price',0), inp('image') ?: null,
+      inp('show_online', 1) ? 1 : 0,
       inp('variations') ? json_encode(inp('variations')) : null,
       inp('addons') ? json_encode(inp('addons')) : null, inp('is_combo') ? 1 : 0]);
     json_out(['id' => $nid]);
@@ -61,14 +62,21 @@ if ($sub === 'items') {
     json_out(['ok' => true]);
   }
 
+  if ($id && $action === 'visibility' && $method === 'PATCH') {
+    require_role(['admin','manager']);
+    q("UPDATE menu_items SET show_online=? WHERE id=?", [inp('show_online') ? 1 : 0, $id]);
+    json_out(['ok' => true]);
+  }
+
   if ($id && $action === '' && $method === 'PUT') {
     require_role(['admin','manager']);
     $cur = one("SELECT * FROM menu_items WHERE id=?", [$id]);
     if (!$cur) json_out(['error'=>'Not found'],404);
-    q("UPDATE menu_items SET category_id=?,name=?,description=?,price=?,image=?,available=?,variations=?,addons=?,is_combo=? WHERE id=?", [
+    q("UPDATE menu_items SET category_id=?,name=?,description=?,price=?,image=?,available=?,show_online=?,variations=?,addons=?,is_combo=? WHERE id=?", [
       inp('category_id', $cur['category_id']), inp('name', $cur['name']),
       inp('description', $cur['description']), inp('price', $cur['price']),
       inp('image', $cur['image']), inp('available', $cur['available']),
+      inp('show_online', $cur['show_online']),
       inp('variations') ? json_encode(inp('variations')) : $cur['variations'],
       inp('addons') ? json_encode(inp('addons')) : $cur['addons'],
       inp('is_combo', $cur['is_combo']), $id]);

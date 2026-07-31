@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS menu_items (
   price DECIMAL(10,2) NOT NULL DEFAULT 0,
   image MEDIUMTEXT,
   available TINYINT NOT NULL DEFAULT 1,
+  show_online TINYINT NOT NULL DEFAULT 1,
   variations TEXT,
   addons TEXT,
   is_combo TINYINT NOT NULL DEFAULT 0
