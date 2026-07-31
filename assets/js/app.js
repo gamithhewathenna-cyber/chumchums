@@ -677,27 +677,31 @@ VIEWS.settings = async (v) => {
     }
   } }, 'Save Settings'), settingsErr);
 
-  const smtpFields = [['smtp_host','SMTP Host'],['smtp_port','SMTP Port'],['smtp_user','SMTP Username'],
-    ['smtp_from_email','From Email'],['smtp_from_name','From Name']];
   const smtpInputs = {};
   const smtpCard = el('div', { class: 'card', style: 'max-width:520px;margin-top:16px' },
     el('div', { class: 'section-title', style: 'margin-top:0' }, 'Email (SMTP) Configuration'));
-  smtpFields.forEach(([k, l]) => {
-    const type = k === 'smtp_port' ? 'number' : (k === 'smtp_from_email' ? 'email' : 'text');
-    const dflt = k === 'smtp_port' ? '587' : '';
-    const i = el('input', { type, value: s[k] || dflt });
-    smtpInputs[k] = i; smtpCard.append(el('label', {}, l), i);
-  });
+  const hostInput = el('input', { type: 'text', value: s.smtp_host || '' });
+  smtpInputs.smtp_host = hostInput;
+  const secureSel = el('select');
+  [['ssl','SSL (port 465)'],['tls','TLS / STARTTLS (port 587)'],['none','None']].forEach(([val, lbl]) =>
+    secureSel.append(el('option', { value: val, selected: (s.smtp_secure || 'ssl') === val }, lbl)));
+  const userInput = el('input', { type: 'text', value: s.smtp_user || '' });
+  smtpInputs.smtp_user = userInput;
   const smtpPass = el('input', { type: 'password',
     placeholder: s.smtp_pass_set ? 'Saved — leave blank to keep' : 'SMTP Password' });
-  const secureSel = el('select');
-  [['none','None'],['ssl','SSL'],['tls','TLS (STARTTLS)']].forEach(([val, lbl]) =>
-    secureSel.append(el('option', { value: val, selected: (s.smtp_secure || 'tls') === val }, lbl)));
+  const fromEmailInput = el('input', { type: 'email', value: s.smtp_from_email || '' });
+  smtpInputs.smtp_from_email = fromEmailInput;
+  const fromNameInput = el('input', { type: 'text', value: s.smtp_from_name || '' });
+  smtpInputs.smtp_from_name = fromNameInput;
   const testTo = el('input', { type: 'email', placeholder: 'Send test to…', value: s.admin_email || '' });
   const smtpErr = el('div', { class: 'err' });
   smtpCard.append(
-    el('label', {}, 'SMTP Password'), smtpPass,
+    el('label', {}, 'SMTP Host'), hostInput,
     el('label', {}, 'Encryption'), secureSel,
+    el('label', {}, 'SMTP Username'), userInput,
+    el('label', {}, 'SMTP Password'), smtpPass,
+    el('label', {}, 'From Email'), fromEmailInput,
+    el('label', {}, 'From Name'), fromNameInput,
     el('label', {}, 'Test Recipient'), testTo,
     el('div', { class: 'row', style: 'margin-top:16px' },
       el('button', { class: 'btn primary', onClick: async (e) => {

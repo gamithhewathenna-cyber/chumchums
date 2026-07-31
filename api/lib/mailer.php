@@ -2,10 +2,10 @@
 // Minimal SMTP client (no external dependencies — supports AUTH LOGIN, implicit SSL, STARTTLS)
 function smtp_send($cfg, $to, $subject, $body) {
   $host = trim($cfg['smtp_host'] ?? '');
-  $port = (int)($cfg['smtp_port'] ?? 587);
   $user = trim($cfg['smtp_user'] ?? '');
   $pass = $cfg['smtp_pass'] ?? '';
-  $secure = $cfg['smtp_secure'] ?? 'tls'; // none|ssl|tls
+  $secure = $cfg['smtp_secure'] ?? 'ssl'; // none|ssl|tls
+  $port = (int)($cfg['smtp_port'] ?? ($secure === 'ssl' ? 465 : ($secure === 'tls' ? 587 : 25)));
   $fromEmail = trim($cfg['smtp_from_email'] ?? $user);
   $fromName = trim($cfg['smtp_from_name'] ?? 'Fork POS');
 
