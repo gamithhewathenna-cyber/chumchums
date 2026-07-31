@@ -748,13 +748,14 @@ function bulkAddItems(cats) {
     el('label', {}, 'Items — one per line, name then price'), textarea, preview, err);
   modal('Bulk Add Menu Items', c, [
     { label: 'Cancel', onClick: closeModal },
-    { label: 'Add Items', primary: true, onClick: async (e) => {
+    { label: 'Add Items', primary: true, onClick: async () => {
       const parsed = parse();
       if (!parsed.length) { err.textContent = 'No valid items to add — check the format'; return; }
-      const btn = e.target; btn.disabled = true;
-      await Promise.all(parsed.map(p => API.post('/menu/items',
-        { name: p.name, price: p.price, category_id: +catSel.value, description: '', show_online: 1 })));
-      closeModal(); toast(`Added ${parsed.length} item${parsed.length > 1 ? 's' : ''}`); go('menu');
+      try {
+        await Promise.all(parsed.map(p => API.post('/menu/items',
+          { name: p.name, price: p.price, category_id: +catSel.value, description: '', show_online: 1 })));
+        closeModal(); toast(`Added ${parsed.length} item${parsed.length > 1 ? 's' : ''}`); go('menu');
+      } catch (apiErr) { err.textContent = apiErr.message || 'Failed to add items'; }
     } }
   ]);
 }
