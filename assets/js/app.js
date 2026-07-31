@@ -642,7 +642,11 @@ VIEWS.menu = async (v) => {
         onClick: async () => { await API.patch(`/menu/items/${i.id}/availability`, { available: i.available ? 0 : 1 }); go('menu'); } },
         i.available ? 'On' : 'Off'); avail.append(toggle); tr.append(avail);
       tr.append(el('td', { html: i.show_online ? statusBadge('available').replace('available', '🌐 Live') : statusBadge('cancelled').replace('cancelled', '🏠 In-Store') }));
-      tr.append(el('td', {}, el('button', { class: 'btn sm', onClick: () => editItem(i, cats) }, 'Edit')));
+      tr.append(el('td', { class: 'row' },
+        el('button', { class: 'btn sm', onClick: () => editItem(i, cats) }, 'Edit'),
+        el('button', { class: 'btn sm danger', onClick: () => confirmDialog(`Delete "${i.name}"?`, async () => {
+          await API.del('/menu/items/' + i.id); toast('Deleted'); go('menu');
+        }) }, 'Delete')));
       t.append(tr);
     });
     card.append(t);
