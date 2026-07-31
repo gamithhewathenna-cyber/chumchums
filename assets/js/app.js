@@ -398,20 +398,37 @@ VIEWS.menu = async (v) => {
     el('button', { class: 'btn', onClick: () => editCategory() }, '+ Category'),
     el('button', { class: 'btn primary', onClick: () => editItem(null, cats) }, '+ Item'));
   v.append(toolbar);
+
+  let activeCat = 'all';
+  const catRow = el('div', { class: 'cats' });
+  const pill = (id, label) => el('div', { class: 'cat-pill' + (id === activeCat ? ' active' : ''), onClick: (e) => {
+    activeCat = id; $$('.cats .cat-pill').forEach(p => p.classList.remove('active')); e.target.classList.add('active'); renderTable();
+  } }, label);
+  catRow.append(pill('all', 'All'));
+  cats.forEach(c => catRow.append(pill(c.id, c.name)));
+  v.append(catRow);
+
   const card = el('div', { class: 'card' });
-  const t = el('table');
-  t.innerHTML = '<tr><th>Item</th><th>Category</th><th>Price</th><th>Available</th><th></th></tr>';
-  items.forEach(i => {
-    const cat = cats.find(c => c.id === i.category_id)?.name || '—';
-    const tr = el('tr');
-    tr.innerHTML = `<td>${i.name}</td><td>${cat}</td><td>${money(i.price)}</td>`;
-    const avail = el('td'); const toggle = el('button', { class: 'btn sm ' + (i.available ? 'primary' : ''),
-      onClick: async () => { await API.patch(`/menu/items/${i.id}/availability`, { available: i.available ? 0 : 1 }); go('menu'); } },
-      i.available ? 'On' : 'Off'); avail.append(toggle); tr.append(avail);
-    tr.append(el('td', {}, el('button', { class: 'btn sm', onClick: () => editItem(i, cats) }, 'Edit')));
-    t.append(tr);
-  });
-  card.append(t); v.append(card);
+  v.append(card);
+  function renderTable() {
+    card.innerHTML = '';
+    const filtered = activeCat === 'all' ? items : items.filter(i => i.category_id === activeCat);
+    if (!filtered.length) { card.append(el('p', { class: 'muted' }, 'No items in this category')); return; }
+    const t = el('table');
+    t.innerHTML = '<tr><th>Item</th><th>Category</th><th>Price</th><th>Available</th><th></th></tr>';
+    filtered.forEach(i => {
+      const cat = cats.find(c => c.id === i.category_id)?.name || '—';
+      const tr = el('tr');
+      tr.innerHTML = `<td>${i.name}</td><td>${cat}</td><td>${money(i.price)}</td>`;
+      const avail = el('td'); const toggle = el('button', { class: 'btn sm ' + (i.available ? 'primary' : ''),
+        onClick: async () => { await API.patch(`/menu/items/${i.id}/availability`, { available: i.available ? 0 : 1 }); go('menu'); } },
+        i.available ? 'On' : 'Off'); avail.append(toggle); tr.append(avail);
+      tr.append(el('td', {}, el('button', { class: 'btn sm', onClick: () => editItem(i, cats) }, 'Edit')));
+      t.append(tr);
+    });
+    card.append(t);
+  }
+  renderTable();
 };
 function editCategory(c = {}) {
   const name = el('input', { placeholder: 'Category name', value: c.name || '' });
