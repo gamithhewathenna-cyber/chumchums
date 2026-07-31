@@ -84,6 +84,11 @@ if ($resource === 'reports' && $method === 'GET') {
 
 // ================= SETTINGS =================
 if ($resource === 'settings') {
+  if (($seg[1] ?? '') === 'public' && $method === 'GET') {
+    $s = [];
+    foreach (all("SELECT skey,svalue FROM settings WHERE skey IN ('logo','restaurant_name')") as $r) $s[$r['skey']] = $r['svalue'];
+    json_out($s);
+  }
   if ($method === 'GET') {
     require_auth();
     $s = [];

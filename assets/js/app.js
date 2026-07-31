@@ -5,6 +5,9 @@ function applyTheme(t) {
 }
 applyTheme(localStorage.getItem('pos_theme') || 'dark');
 
+// Show the saved logo on the login screen even before signing in
+API.get('/settings/public').then(s => s.logo && applyLogo(s.logo)).catch(() => {});
+
 // ---------- Auth ----------
 async function doLogin() {
   const username = $('#loginUser').value.trim();
@@ -68,7 +71,7 @@ async function startApp() {
   $('#login').classList.add('hidden');
   $('#app').classList.remove('hidden');
   $('#userChip').textContent = `${API.user.name} · ${API.user.role}`;
-  try { const s = await API.get('/settings'); CUR = s.currency || '$'; } catch {}
+  try { const s = await API.get('/settings'); CUR = s.currency || '$'; applyLogo(s.logo || ''); } catch {}
   buildNav();
   go('dashboard');
 }
@@ -588,6 +591,43 @@ function exportCSV(name, rows) {
 VIEWS.settings = async (v) => {
   const s = await API.get('/settings');
   v.innerHTML = '';
+  let logo = s.logo || '';
+
+  const logoCard = el('div', { class: 'card', style: 'max-width:520px;margin-bottom:16px' },
+    el('div', { class: 'section-title', style: 'margin-top:0' }, 'Restaurant Logo'));
+  const preview = el('img', { class: 'preview', src: logo });
+  const emptyState = el('div', { class: 'preview-empty' }, '🍽️');
+  preview.style.display = logo ? '' : 'none';
+  emptyState.style.display = logo ? 'none' : '';
+  const fileInput = el('input', { type: 'file', accept: 'image/*', style: 'width:auto' });
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const size = 128;
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const scale = Math.max(size / img.width, size / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        const out = canvas.toDataURL('image/png');
+        if (out.length > 60000) { toast('Logo too large — pick a simpler image'); return; }
+        logo = out;
+        preview.src = logo; preview.style.display = ''; emptyState.style.display = 'none';
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  const removeBtn = el('button', { class: 'btn sm', onClick: () => {
+    logo = ''; preview.style.display = 'none'; emptyState.style.display = ''; fileInput.value = '';
+  } }, 'Remove');
+  logoCard.append(el('div', { class: 'logo-upload' }, preview, emptyState, fileInput, removeBtn));
+
   const fields = [['restaurant_name','Restaurant Name'],['address','Address'],['phone','Phone'],
     ['currency','Currency Symbol'],['timezone','Time Zone'],['language','Language'],['receipt_footer','Receipt Footer']];
   const card = el('div', { class: 'card', style: 'max-width:520px' });
@@ -595,7 +635,8 @@ VIEWS.settings = async (v) => {
   fields.forEach(([k, l]) => { const i = el('input', { value: s[k] || '' }); inputs[k] = i; card.append(el('label', {}, l), i); });
   card.append(el('button', { class: 'btn primary', style: 'margin-top:16px', onClick: async () => {
     const body = {}; Object.entries(inputs).forEach(([k, i]) => body[k] = i.value);
-    await API.put('/settings', body); CUR = body.currency || '$'; toast('Settings saved');
+    body.logo = logo;
+    await API.put('/settings', body); CUR = body.currency || '$'; applyLogo(logo); toast('Settings saved');
   } }, 'Save Settings'));
 
   const backup = el('div', { class: 'card', style: 'max-width:520px;margin-top:16px' },
@@ -607,7 +648,7 @@ VIEWS.settings = async (v) => {
       const a = el('a', { href: URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })),
         download: 'pos-backup-' + new Date().toISOString().slice(0, 10) + '.json' }); a.click();
     } }, '⬇ Download Backup'));
-  v.append(card, backup);
+  v.append(logoCard, card, backup);
 };
 
 // ---------- Boot ----------

@@ -12,6 +12,15 @@ const el = (tag, attrs = {}, ...kids) => {
   return e;
 };
 
+function applyLogo(dataUrl) {
+  ['loginLogo', 'sidebarLogo'].forEach(id => {
+    const t = document.getElementById(id);
+    if (!t) return;
+    t.innerHTML = dataUrl ? '' : '🍽️';
+    if (dataUrl) t.append(el('img', { src: dataUrl, alt: 'Logo' }));
+  });
+}
+
 let CUR = '$';
 const money = n => CUR + Number(n || 0).toFixed(2);
 const fmtDate = s => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleString() : '';

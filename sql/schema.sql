@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 CREATE TABLE IF NOT EXISTS settings (
   skey VARCHAR(60) PRIMARY KEY,
-  svalue TEXT
+  svalue MEDIUMTEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET foreign_key_checks = 1;
