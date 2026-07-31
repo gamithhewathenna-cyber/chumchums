@@ -346,9 +346,10 @@ async function printReceipt(o) {
   let s = {};
   try { s = await API.get('/settings'); } catch (e) {}
   const lines = o.items.map(i => `<div class="rc-line"><span>${i.qty}× ${i.name}</span><span>${money(i.qty * i.price)}</span></div>`).join('');
+  const billLogo = s.receipt_logo || s.logo;
   $('#receiptArea').innerHTML = `
     <div class="rc-head">
-      ${s.logo ? `<img class="rc-logo" src="${s.logo}" />` : ''}
+      ${billLogo ? `<img class="rc-logo" src="${billLogo}" />` : ''}
       <h2>${s.restaurant_name || 'Receipt'}</h2>
       ${s.address ? `<div>${s.address}</div>` : ''}
       ${s.phone ? `<div>${s.phone}</div>` : ''}
@@ -930,6 +931,44 @@ VIEWS.settings = async (v) => {
   } }, 'Remove');
   logoCard.append(el('div', { class: 'logo-upload' }, preview, emptyState, fileInput, removeBtn));
 
+  let receiptLogo = s.receipt_logo || '';
+  const receiptLogoCard = el('div', { class: 'card', style: 'max-width:520px;margin-bottom:16px' },
+    el('div', { class: 'section-title', style: 'margin-top:0' }, 'Receipt Logo'),
+    el('p', { class: 'muted', style: 'margin:0 0 10px;font-size:12px' },
+      'Shown at the top of printed bills. Leave blank to use your Restaurant Logo above instead.'));
+  const rPreview = el('img', { class: 'preview', src: receiptLogo });
+  const rEmptyState = el('div', { class: 'preview-empty' }, '🧾');
+  rPreview.style.display = receiptLogo ? '' : 'none';
+  rEmptyState.style.display = receiptLogo ? 'none' : '';
+  const rFileInput = el('input', { type: 'file', accept: 'image/*', style: 'width:auto' });
+  rFileInput.addEventListener('change', () => {
+    const file = rFileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const size = 128;
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const scale = Math.max(size / img.width, size / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        const out = canvas.toDataURL('image/png');
+        if (out.length > 60000) { toast('Logo too large — pick a simpler image'); return; }
+        receiptLogo = out;
+        rPreview.src = receiptLogo; rPreview.style.display = ''; rEmptyState.style.display = 'none';
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  const rRemoveBtn = el('button', { class: 'btn sm', onClick: () => {
+    receiptLogo = ''; rPreview.style.display = 'none'; rEmptyState.style.display = ''; rFileInput.value = '';
+  } }, 'Remove');
+  receiptLogoCard.append(el('div', { class: 'logo-upload' }, rPreview, rEmptyState, rFileInput, rRemoveBtn));
+
   const fieldsBefore = [['restaurant_name','Restaurant Name'],['admin_email','Admin Email'],['address','Address'],['phone','Phone']];
   const fieldsAfter = [['language','Language'],['receipt_footer','Receipt Footer']];
   const card = el('div', { class: 'card', style: 'max-width:520px' });
@@ -966,7 +1005,7 @@ VIEWS.settings = async (v) => {
     try {
       const body = {}; Object.entries(inputs).forEach(([k, i]) => body[k] = i.value);
       body.currency = currencySel.value; body.timezone = timezoneSel.value;
-      body.logo = logo;
+      body.logo = logo; body.receipt_logo = receiptLogo;
       await API.put('/settings', body);
       CUR = body.currency || '$'; applyLogo(logo); applyBrandName(body.restaurant_name);
       toast('Settings saved');
@@ -1110,7 +1149,7 @@ VIEWS.settings = async (v) => {
       } catch (e) { passErr.textContent = e.message; }
     } }, 'Update Password'));
 
-  v.append(logoCard, card, onlineCard, smtpCard, passCard, backup);
+  v.append(logoCard, receiptLogoCard, card, onlineCard, smtpCard, passCard, backup);
 };
 
 // ---------- Boot ----------
