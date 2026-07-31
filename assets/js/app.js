@@ -660,11 +660,22 @@ VIEWS.settings = async (v) => {
   const card = el('div', { class: 'card', style: 'max-width:520px' });
   const inputs = {};
   fields.forEach(([k, l]) => { const i = el('input', { type: k === 'admin_email' ? 'email' : 'text', value: s[k] || '' }); inputs[k] = i; card.append(el('label', {}, l), i); });
-  card.append(el('button', { class: 'btn primary', style: 'margin-top:16px', onClick: async () => {
-    const body = {}; Object.entries(inputs).forEach(([k, i]) => body[k] = i.value);
-    body.logo = logo;
-    await API.put('/settings', body); CUR = body.currency || '$'; applyLogo(logo); applyBrandName(body.restaurant_name); toast('Settings saved');
-  } }, 'Save Settings'));
+  const settingsErr = el('div', { class: 'err' });
+  card.append(el('button', { class: 'btn primary', style: 'margin-top:16px', onClick: async (e) => {
+    settingsErr.textContent = '';
+    const btn = e.target; btn.disabled = true;
+    try {
+      const body = {}; Object.entries(inputs).forEach(([k, i]) => body[k] = i.value);
+      body.logo = logo;
+      await API.put('/settings', body);
+      CUR = body.currency || '$'; applyLogo(logo); applyBrandName(body.restaurant_name);
+      toast('Settings saved');
+    } catch (err) {
+      settingsErr.textContent = err.message || 'Save failed';
+    } finally {
+      btn.disabled = false;
+    }
+  } }, 'Save Settings'), settingsErr);
 
   const backup = el('div', { class: 'card', style: 'max-width:520px;margin-top:16px' },
     el('div', { class: 'section-title', style: 'margin-top:0' }, 'Backup & Restore'),
