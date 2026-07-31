@@ -333,7 +333,7 @@ async function viewOrder(id) {
   const t = el('table'); t.innerHTML = '<tr><th>Item</th><th>Qty</th><th>Price</th></tr>';
   o.items.forEach(i => t.insertAdjacentHTML('beforeend',
     `<tr><td>${i.name}</td><td>${i.qty}</td><td>${money(i.qty * i.price)}</td></tr>`));
-  c.append(t, el('p', { style: 'margin-top:10px' }, `Total: ${money(o.total)} · ${o.type} · `, statusBadge(o.status)));
+  c.append(t, el('p', { style: 'margin-top:10px', html: `Total: ${money(o.total)} · ${o.type} · ${statusBadge(o.status)}` }));
   const acts = [{ label: 'Close', onClick: closeModal }];
   if (o.paid) acts.push({ label: '🖨️ Print Receipt', onClick: () => printReceipt(o) });
   if (o.kitchen_status === 'held')
