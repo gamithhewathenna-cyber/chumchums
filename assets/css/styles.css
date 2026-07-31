@@ -199,6 +199,8 @@ tr:hover td { background: var(--surface-2); }
   border-bottom: 1px solid var(--border); background: var(--surface); }
 .order-top h1 { font-size: 19px; }
 .order-top .logo { font-size: 26px; }
+.test-mode-bar { background: var(--amber); color: #1a1200; text-align: center; font-weight: 700;
+  font-size: 13px; padding: 8px 12px; letter-spacing: .02em; }
 .order-screen { flex: 1; padding: 22px; overflow-y: auto; }
 .order-summary { margin: 14px 0; padding-top: 10px; border-top: 1px solid var(--border); }
 

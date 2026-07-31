@@ -821,10 +821,17 @@ VIEWS.settings = async (v) => {
 
   const onlineEnabled = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
   onlineEnabled.checked = s.online_ordering_enabled === '1';
-  const stripeSecret = el('input', { type: 'password',
-    placeholder: s.stripe_secret_key_set ? 'Saved — leave blank to keep' : 'sk_live_… or sk_test_…' });
-  const stripeWebhook = el('input', { type: 'password',
-    placeholder: s.stripe_webhook_secret_set ? 'Saved — leave blank to keep' : 'whsec_…' });
+  const modeSel = el('select');
+  [['test','🧪 Sandbox (Test Mode)'], ['live','🔴 Live (Real Payments)']].forEach(([val, lbl]) =>
+    modeSel.append(el('option', { value: val, selected: (s.stripe_mode || 'test') === val }, lbl)));
+  const testSecret = el('input', { type: 'password',
+    placeholder: s.stripe_secret_key_test_set ? 'Saved — leave blank to keep' : 'sk_test_…' });
+  const testWebhook = el('input', { type: 'password',
+    placeholder: s.stripe_webhook_secret_test_set ? 'Saved — leave blank to keep' : 'whsec_…' });
+  const liveSecret = el('input', { type: 'password',
+    placeholder: s.stripe_secret_key_live_set ? 'Saved — leave blank to keep' : 'sk_live_…' });
+  const liveWebhook = el('input', { type: 'password',
+    placeholder: s.stripe_webhook_secret_live_set ? 'Saved — leave blank to keep' : 'whsec_…' });
   const stripeCurrency = el('input', { type: 'text', value: s.stripe_currency || 'usd', placeholder: 'usd' });
   const webhookUrlBox = el('input', { type: 'text', readOnly: true, value: location.origin + '/api/public/stripe-webhook' });
   const onlineErr = el('div', { class: 'err' });
@@ -833,18 +840,27 @@ VIEWS.settings = async (v) => {
     el('label', { class: 'row', style: 'gap:8px' }, onlineEnabled, 'Enable online ordering (QR / tablet)'),
     el('p', { class: 'muted', style: 'margin:8px 0' },
       'Customers order via each table\'s link (see Tables) and pay through Stripe Checkout before it reaches your Online Orders queue.'),
-    el('label', {}, 'Stripe Secret Key'), stripeSecret,
-    el('label', {}, 'Stripe Webhook Secret'), stripeWebhook,
+    el('label', {}, 'Active Mode'), modeSel,
+    el('p', { class: 'muted', style: 'font-size:12px;margin:4px 0 10px' },
+      'Sandbox uses Stripe test cards (e.g. 4242 4242 4242 4242) — no real money moves. Switch to Live only once you\'ve tested the full flow end to end.'),
+    el('div', { class: 'section-title', style: 'font-size:13px' }, '🧪 Sandbox (Test) Keys'),
+    el('label', {}, 'Test Secret Key'), testSecret,
+    el('label', {}, 'Test Webhook Secret'), testWebhook,
+    el('div', { class: 'section-title', style: 'font-size:13px' }, '🔴 Live Keys'),
+    el('label', {}, 'Live Secret Key'), liveSecret,
+    el('label', {}, 'Live Webhook Secret'), liveWebhook,
     el('label', {}, 'Currency Code (ISO, e.g. usd)'), stripeCurrency,
-    el('label', {}, 'Webhook URL — add this in your Stripe Dashboard, subscribed to checkout.session.completed'),
+    el('label', {}, 'Webhook URL — register this same URL as both a Test and a Live endpoint in Stripe, subscribed to checkout.session.completed'),
     el('div', { class: 'row' }, webhookUrlBox, el('button', { class: 'btn sm', onClick: () => copyToClipboard(webhookUrlBox.value) }, 'Copy')),
     el('button', { class: 'btn primary', style: 'margin-top:16px', onClick: async (e) => {
       onlineErr.textContent = '';
       const btn = e.target; btn.disabled = true;
       try {
-        const body = { online_ordering_enabled: onlineEnabled.checked ? '1' : '0', stripe_currency: stripeCurrency.value };
-        if (stripeSecret.value) body.stripe_secret_key = stripeSecret.value;
-        if (stripeWebhook.value) body.stripe_webhook_secret = stripeWebhook.value;
+        const body = { online_ordering_enabled: onlineEnabled.checked ? '1' : '0', stripe_mode: modeSel.value, stripe_currency: stripeCurrency.value };
+        if (testSecret.value) body.stripe_secret_key_test = testSecret.value;
+        if (testWebhook.value) body.stripe_webhook_secret_test = testWebhook.value;
+        if (liveSecret.value) body.stripe_secret_key_live = liveSecret.value;
+        if (liveWebhook.value) body.stripe_webhook_secret_live = liveWebhook.value;
         await API.put('/settings', body);
         toast('Online ordering settings saved');
       } catch (err) { onlineErr.textContent = err.message; }

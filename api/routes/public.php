@@ -11,7 +11,7 @@ function online_ordering_enabled() {
 // ---- GET /public/menu ----
 if ($sub === 'menu' && $method === 'GET') {
   $s = [];
-  foreach (all("SELECT skey,svalue FROM settings WHERE skey IN ('restaurant_name','logo','currency','online_ordering_enabled')") as $r) $s[$r['skey']] = $r['svalue'];
+  foreach (all("SELECT skey,svalue FROM settings WHERE skey IN ('restaurant_name','logo','currency','online_ordering_enabled','stripe_mode')") as $r) $s[$r['skey']] = $r['svalue'];
   if (($s['online_ordering_enabled'] ?? '') !== '1') json_out(['enabled' => false]);
   $cats = all("SELECT id,name,sort FROM categories WHERE active=1 ORDER BY sort,name");
   $items = all("SELECT id,category_id,name,description,price,image,variations,addons FROM menu_items WHERE available=1 ORDER BY name");
@@ -21,7 +21,9 @@ if ($sub === 'menu' && $method === 'GET') {
   }
   unset($i);
   json_out(['enabled' => true, 'restaurant_name' => $s['restaurant_name'] ?? 'Restaurant',
-    'logo' => $s['logo'] ?? '', 'currency' => $s['currency'] ?? '$', 'categories' => $cats, 'items' => $items]);
+    'logo' => $s['logo'] ?? '', 'currency' => $s['currency'] ?? '$',
+    'test_mode' => ($s['stripe_mode'] ?? 'test') !== 'live',
+    'categories' => $cats, 'items' => $items]);
 }
 
 // ---- GET /public/tables ----
@@ -71,8 +73,10 @@ if ($sub === 'checkout' && $method === 'POST') {
       [$oid, $v['menu_item_id'], $v['name'], $v['qty'], $v['price']]);
   }
 
-  $cfg = [];
-  foreach (all("SELECT skey,svalue FROM settings WHERE skey IN ('stripe_secret_key','stripe_currency')") as $r) $cfg[$r['skey']] = $r['svalue'];
+  $raw = [];
+  foreach (all("SELECT skey,svalue FROM settings WHERE skey IN ('stripe_mode','stripe_secret_key_live','stripe_secret_key_test','stripe_currency')") as $r) $raw[$r['skey']] = $r['svalue'];
+  $mode = ($raw['stripe_mode'] ?? 'test') === 'live' ? 'live' : 'test';
+  $cfg = ['stripe_secret_key' => $raw['stripe_secret_key_' . $mode] ?? '', 'stripe_currency' => $raw['stripe_currency'] ?? 'usd'];
 
   $origin = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? '');
   $successUrl = $origin . '/order.html?order=' . $oid . '&code=' . urlencode($code) . '&paid=1';
@@ -99,10 +103,11 @@ if ($sub === 'stripe-webhook' && $method === 'POST') {
   $payload = file_get_contents('php://input');
   $sig = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '';
   $cfg = [];
-  foreach (all("SELECT skey,svalue FROM settings WHERE skey='stripe_webhook_secret'") as $r) $cfg[$r['skey']] = $r['svalue'];
-  if (!stripe_verify_webhook_sig($payload, $sig, $cfg['stripe_webhook_secret'] ?? '')) {
-    json_out(['error' => 'Invalid signature'], 400);
-  }
+  foreach (all("SELECT skey,svalue FROM settings WHERE skey IN ('stripe_webhook_secret_live','stripe_webhook_secret_test')") as $r) $cfg[$r['skey']] = $r['svalue'];
+  // One shared URL is registered as both a live and a test webhook endpoint in Stripe — try whichever secret matches
+  $verified = stripe_verify_webhook_sig($payload, $sig, $cfg['stripe_webhook_secret_live'] ?? '')
+    || stripe_verify_webhook_sig($payload, $sig, $cfg['stripe_webhook_secret_test'] ?? '');
+  if (!$verified) json_out(['error' => 'Invalid signature'], 400);
   $event = json_decode($payload, true);
   $type = $event['type'] ?? '';
   if ($type === 'checkout.session.completed' || $type === 'checkout.session.async_payment_succeeded') {

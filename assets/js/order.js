@@ -22,6 +22,14 @@ function showScreen(id) {
 }
 
 async function boot() {
+  let menu;
+  try { menu = await apiGet('/public/menu'); } catch (e) { showScreen('scrDisabled'); return; }
+  if (!menu.enabled) { showScreen('scrDisabled'); return; }
+
+  applyBrand(menu.logo, menu.restaurant_name);
+  $('#testModeBar').classList.toggle('hidden', !menu.test_mode);
+  CUR = menu.currency || '$';
+
   // Returning from Stripe after a successful payment — skip straight to the waiting screen
   if (params.get('paid') === '1' && params.get('order') && params.get('code')) {
     showScreen('scrWait');
@@ -29,14 +37,7 @@ async function boot() {
     return;
   }
 
-  let menu;
-  try { menu = await apiGet('/public/menu'); } catch (e) { showScreen('scrDisabled'); return; }
-  if (!menu.enabled) { showScreen('scrDisabled'); return; }
-
-  applyBrand(menu.logo, menu.restaurant_name);
-  CUR = menu.currency || '$';
   CATS = menu.categories; ITEMS = menu.items;
-
   try { TABLES = await apiGet('/public/tables'); } catch (e) { TABLES = []; }
 
   if (params.get('cancelled') === '1') toast('Payment cancelled — you can try again');

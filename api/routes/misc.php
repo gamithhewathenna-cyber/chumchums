@@ -113,8 +113,9 @@ if ($resource === 'settings') {
     $s = [];
     foreach (all("SELECT skey,svalue FROM settings") as $r) $s[$r['skey']] = $r['svalue'];
     if (isset($s['smtp_pass'])) { $s['smtp_pass_set'] = $s['smtp_pass'] !== ''; unset($s['smtp_pass']); }
-    if (isset($s['stripe_secret_key'])) { $s['stripe_secret_key_set'] = $s['stripe_secret_key'] !== ''; unset($s['stripe_secret_key']); }
-    if (isset($s['stripe_webhook_secret'])) { $s['stripe_webhook_secret_set'] = $s['stripe_webhook_secret'] !== ''; unset($s['stripe_webhook_secret']); }
+    foreach (['stripe_secret_key_live','stripe_secret_key_test','stripe_webhook_secret_live','stripe_webhook_secret_test'] as $k) {
+      if (isset($s[$k])) { $s[$k . '_set'] = $s[$k] !== ''; unset($s[$k]); }
+    }
     json_out($s);
   }
   if ($method === 'PUT') {
