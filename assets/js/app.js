@@ -582,6 +582,7 @@ VIEWS.menu = async (v) => {
   v.innerHTML = '';
   const toolbar = el('div', { class: 'toolbar' },
     el('span', { class: 'section-title', style: 'margin:0' }, 'Menu'), el('div', { class: 'spacer' }),
+    el('button', { class: 'btn', onClick: manageCategories }, '🗂️ Manage Categories'),
     el('button', { class: 'btn', onClick: () => editCategory() }, '+ Category'),
     el('button', { class: 'btn primary', onClick: () => editItem(null, cats) }, '+ Item'));
   v.append(toolbar);
@@ -661,13 +662,39 @@ VIEWS.menu = async (v) => {
 };
 function editCategory(c = {}) {
   const name = el('input', { placeholder: 'Category name', value: c.name || '' });
-  modal(c.id ? 'Edit Category' : 'New Category', el('div', {}, el('label', {}, 'Name'), name), [
-    { label: 'Cancel', onClick: closeModal },
+  const acts = [{ label: 'Cancel', onClick: closeModal },
     { label: 'Save', primary: true, onClick: async () => {
       if (c.id) await API.put('/menu/categories/' + c.id, { name: name.value });
       else await API.post('/menu/categories', { name: name.value });
       closeModal(); toast('Saved'); go('menu');
-    } }]);
+    } }];
+  if (c.id) acts.splice(1, 0, { label: 'Delete', danger: true, onClick: () => confirmDialog(`Delete category "${c.name}"? Items in it will become uncategorized.`, async () => {
+    await API.del('/menu/categories/' + c.id); closeModal(); toast('Deleted'); go('menu');
+  }) });
+  modal(c.id ? 'Edit Category' : 'New Category', el('div', {}, el('label', {}, 'Name'), name), acts);
+}
+async function manageCategories() {
+  const cats = await API.get('/menu/categories');
+  const c = el('div');
+  if (!cats.length) c.append(el('p', { class: 'muted' }, 'No categories yet'));
+  else {
+    const t = el('table'); t.innerHTML = '<tr><th>Name</th><th></th></tr>';
+    cats.forEach(cat => {
+      const tr = el('tr');
+      tr.append(el('td', {}, cat.name));
+      tr.append(el('td', { class: 'row' },
+        el('button', { class: 'btn sm', onClick: () => { closeModal(); editCategory(cat); } }, 'Edit'),
+        el('button', { class: 'btn sm danger', onClick: () => confirmDialog(`Delete category "${cat.name}"? Items in it will become uncategorized.`, async () => {
+          await API.del('/menu/categories/' + cat.id); toast('Deleted'); await go('menu'); manageCategories();
+        }) }, 'Delete')));
+      t.append(tr);
+    });
+    c.append(t);
+  }
+  modal('Manage Categories', c, [
+    { label: 'Close', onClick: closeModal },
+    { label: '+ New Category', primary: true, onClick: () => { closeModal(); editCategory(); } },
+  ]);
 }
 function editItem(i, cats) {
   i = i || {};
