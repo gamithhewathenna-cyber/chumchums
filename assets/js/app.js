@@ -655,11 +655,11 @@ VIEWS.settings = async (v) => {
   } }, 'Remove');
   logoCard.append(el('div', { class: 'logo-upload' }, preview, emptyState, fileInput, removeBtn));
 
-  const fields = [['restaurant_name','Restaurant Name'],['address','Address'],['phone','Phone'],
+  const fields = [['restaurant_name','Restaurant Name'],['admin_email','Admin Email'],['address','Address'],['phone','Phone'],
     ['currency','Currency Symbol'],['timezone','Time Zone'],['language','Language'],['receipt_footer','Receipt Footer']];
   const card = el('div', { class: 'card', style: 'max-width:520px' });
   const inputs = {};
-  fields.forEach(([k, l]) => { const i = el('input', { value: s[k] || '' }); inputs[k] = i; card.append(el('label', {}, l), i); });
+  fields.forEach(([k, l]) => { const i = el('input', { type: k === 'admin_email' ? 'email' : 'text', value: s[k] || '' }); inputs[k] = i; card.append(el('label', {}, l), i); });
   card.append(el('button', { class: 'btn primary', style: 'margin-top:16px', onClick: async () => {
     const body = {}; Object.entries(inputs).forEach(([k, i]) => body[k] = i.value);
     body.logo = logo;
