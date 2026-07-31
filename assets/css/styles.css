@@ -74,6 +74,9 @@ label { font-size: 13px; color: var(--muted); display: block; margin-top: 8px; }
 .nav-item.active { background: var(--primary); color: #fff; }
 .nav-item .ic { width: 20px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .nav-item .ic svg { width: 18px; height: 18px; }
+.nav-badge { margin-left: auto; background: var(--red); color: #fff; font-size: 11px; font-weight: 700;
+  border-radius: 10px; padding: 1px 7px; min-width: 18px; text-align: center; }
+.nav-item.active .nav-badge { background: #fff; color: var(--primary); }
 .sidebar-foot { display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px solid var(--border); }
 .sidebar-foot .btn { justify-content: flex-start; }
 
@@ -182,6 +185,15 @@ tr:hover td { background: var(--surface-2); }
   position: relative; }
 .bar span { position: absolute; bottom: -20px; left: 0; right: 0; text-align: center;
   font-size: 11px; color: var(--muted); }
+
+/* Public ordering page */
+.order-app { min-height: 100vh; display: flex; flex-direction: column; }
+.order-top { display: flex; align-items: center; gap: 10px; padding: 14px 22px;
+  border-bottom: 1px solid var(--border); background: var(--surface); }
+.order-top h1 { font-size: 19px; }
+.order-top .logo { font-size: 26px; }
+.order-screen { flex: 1; padding: 22px; overflow-y: auto; }
+.order-summary { margin: 14px 0; padding-top: 10px; border-top: 1px solid var(--border); }
 
 /* Responsive */
 @media (max-width: 900px) {

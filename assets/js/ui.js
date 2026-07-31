@@ -32,6 +32,10 @@ let CUR = '$';
 const money = n => CUR + Number(n || 0).toFixed(2);
 const fmtDate = s => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleString() : '';
 
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(() => toast('Copied!')).catch(() => toast('Copy failed'));
+}
+
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 2200);
@@ -41,7 +45,7 @@ function statusBadge(s) {
   const map = { available: 'b-green', occupied: 'b-red', reserved: 'b-amber', cleaning: 'b-blue',
     open: 'b-blue', held: 'b-gray', kitchen: 'b-amber', ready: 'b-green', completed: 'b-green',
     cancelled: 'b-gray', refunded: 'b-red', new: 'b-amber', preparing: 'b-blue',
-    paid: 'b-green', unpaid: 'b-red' };
+    paid: 'b-green', unpaid: 'b-red', pending: 'b-amber', awaiting_payment: 'b-gray' };
   return `<span class="badge ${map[s] || 'b-gray'}">${s}</span>`;
 }
 

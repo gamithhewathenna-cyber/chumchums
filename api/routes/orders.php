@@ -34,6 +34,7 @@ if ($sub === '' && $method === 'GET') {
   if ($s = query_param('status')) { $sql .= " AND status=?"; $p[] = $s; }
   if ($t = query_param('type')) { $sql .= " AND type=?"; $p[] = $t; }
   if ($tb = query_param('table_id')) { $sql .= " AND table_id=?"; $p[] = $tb; }
+  if ($src = query_param('source')) { $sql .= " AND source=?"; $p[] = $src; }
   if (query_param('today')) $sql .= " AND DATE(created_at)=CURDATE()";
   $sql .= " ORDER BY created_at DESC";
   json_out(array_map('with_items', all($sql, $p)));
@@ -101,7 +102,18 @@ if (is_numeric($sub)) {
 
   if ($action === 'send-kitchen' && $method === 'POST') {
     require_auth();
+    $cur = one("SELECT table_id FROM orders WHERE id=?", [$id]);
     q("UPDATE orders SET status='kitchen', kitchen_status='new' WHERE id=?", [$id]);
+    if ($cur && $cur['table_id']) q("UPDATE restaurant_tables SET status='occupied' WHERE id=?", [$cur['table_id']]);
+    json_out(['ok' => true]);
+  }
+
+  if ($action === 'reject' && $method === 'POST') {
+    require_auth();
+    $cur = one("SELECT * FROM orders WHERE id=?", [$id]);
+    if (!$cur) json_out(['error' => 'Not found'], 404);
+    q("UPDATE orders SET status='cancelled' WHERE id=?", [$id]);
+    audit('reject_online_order', $cur['code']);
     json_out(['ok' => true]);
   }
 

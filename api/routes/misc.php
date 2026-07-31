@@ -44,13 +44,14 @@ if ($resource === 'dashboard' && $method === 'GET') {
   $activeTables = one("SELECT COUNT(*) c FROM restaurant_tables WHERE status='occupied'")['c'];
   $totalRevenue = one("SELECT COALESCE(SUM(total),0) v FROM orders WHERE paid=1")['v'];
   $pendingKitchen = one("SELECT COUNT(*) c FROM orders WHERE kitchen_status IN ('new','preparing')")['c'];
+  $pendingOnline = one("SELECT COUNT(*) c FROM orders WHERE source='online' AND status='pending'")['c'];
   $lowStock = all("SELECT name,stock,reorder_level,unit FROM ingredients WHERE stock<=reorder_level");
   $recent = all("SELECT id,code,type,total,paid,created_at FROM orders ORDER BY created_at DESC LIMIT 8");
   $chart = all("SELECT DATE(created_at) d, COALESCE(SUM(total),0) v FROM orders
     WHERE paid=1 AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
     GROUP BY DATE(created_at) ORDER BY d");
   json_out(compact('salesToday','ordersToday','activeTables','totalRevenue',
-    'pendingKitchen','lowStock','recent','chart'));
+    'pendingKitchen','pendingOnline','lowStock','recent','chart'));
 }
 
 // ================= REPORTS =================
@@ -112,6 +113,8 @@ if ($resource === 'settings') {
     $s = [];
     foreach (all("SELECT skey,svalue FROM settings") as $r) $s[$r['skey']] = $r['svalue'];
     if (isset($s['smtp_pass'])) { $s['smtp_pass_set'] = $s['smtp_pass'] !== ''; unset($s['smtp_pass']); }
+    if (isset($s['stripe_secret_key'])) { $s['stripe_secret_key_set'] = $s['stripe_secret_key'] !== ''; unset($s['stripe_secret_key']); }
+    if (isset($s['stripe_webhook_secret'])) { $s['stripe_webhook_secret_set'] = $s['stripe_webhook_secret'] !== ''; unset($s['stripe_webhook_secret']); }
     json_out($s);
   }
   if ($method === 'PUT') {

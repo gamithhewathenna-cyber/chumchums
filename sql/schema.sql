@@ -102,8 +102,14 @@ CREATE TABLE IF NOT EXISTS orders (
   total DECIMAL(10,2) DEFAULT 0,
   payment_method VARCHAR(20),
   paid TINYINT NOT NULL DEFAULT 0,
+  source VARCHAR(20) NOT NULL DEFAULT 'pos',
+  customer_name VARCHAR(160) NULL,
+  customer_email VARCHAR(160) NULL,
+  customer_phone VARCHAR(40) NULL,
+  stripe_session_id VARCHAR(255) NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_orders_source_status (source, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS order_items (

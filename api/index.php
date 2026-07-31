@@ -34,6 +34,7 @@ $routes = [
   'reports'   => 'misc.php',
   'settings'  => 'misc.php',
   'backup'    => 'misc.php',
+  'public'    => 'public.php',
   'health'    => null,
 ];
 

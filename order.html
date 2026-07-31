@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Order Online</title>
+  <link rel="stylesheet" href="/assets/css/styles.css" />
+</head>
+<body>
+  <div class="order-app">
+    <header class="order-top">
+      <span class="logo" id="orderLogo">🍽️</span>
+      <h1 id="orderBrandName">Restaurant</h1>
+    </header>
+
+    <div id="scrDisabled" class="order-screen hidden">
+      <div class="card" style="max-width:420px;margin:40px auto;text-align:center">
+        <p>Online ordering is currently unavailable. Please order with a staff member.</p>
+      </div>
+    </div>
+
+    <div id="scrMenu" class="order-screen hidden">
+      <div class="pos">
+        <div class="pos-menu">
+          <div class="cats" id="orderCats"></div>
+          <div class="menu-grid" id="orderMenuGrid"></div>
+        </div>
+        <div class="cart">
+          <div class="cart-head">Your Order</div>
+          <div class="cart-items" id="orderCartItems"></div>
+          <div class="cart-foot" id="orderCartFoot"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="scrDetails" class="order-screen hidden">
+      <div class="card" style="max-width:480px;margin:20px auto">
+        <div class="section-title" style="margin-top:0">Your Details</div>
+        <label>Table Number</label>
+        <select id="dTable"></select>
+        <label>Full Name</label>
+        <input id="dName" placeholder="Full name" />
+        <label>Email Address</label>
+        <input id="dEmail" type="email" placeholder="you@example.com" />
+        <label>Phone Number (optional)</label>
+        <input id="dPhone" type="tel" placeholder="Phone number" />
+        <label>Special Instructions (optional)</label>
+        <textarea id="dNotes" rows="3" placeholder="Allergies, preferences…"></textarea>
+        <div id="orderSummary" class="order-summary"></div>
+        <div id="detailsErr" class="err"></div>
+        <button id="backToMenu" class="btn block" style="margin-top:10px">← Back to Menu</button>
+        <button id="payBtn" class="btn primary block" style="margin-top:8px">Pay &amp; Place Order</button>
+      </div>
+    </div>
+
+    <div id="scrWait" class="order-screen hidden">
+      <div class="card" style="max-width:420px;margin:40px auto;text-align:center">
+        <div id="waitIcon" style="font-size:40px">⏳</div>
+        <h2 id="waitTitle">Processing…</h2>
+        <p id="waitMsg" class="muted"></p>
+        <p id="waitCode" class="muted"></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="/assets/js/ui.js"></script>
+  <script src="/assets/js/order.js"></script>
+</body>
+</html>

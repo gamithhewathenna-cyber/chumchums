@@ -54,6 +54,7 @@ const ICONS = {
   dashboard: `<svg ${ICON_SVG_WRAP}><rect x="2" y="2" width="7" height="7" rx="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5"/></svg>`,
   pos: `<svg ${ICON_SVG_WRAP}><rect x="2" y="2" width="16" height="16" rx="4"/><line x1="10" y1="6" x2="10" y2="14"/><line x1="6" y1="10" x2="14" y2="10"/></svg>`,
   orders: `<svg ${ICON_SVG_WRAP}><rect x="4" y="3" width="12" height="15" rx="1.5"/><rect x="7" y="1.3" width="6" height="3" rx="1"/><polyline points="7,11 9,13 13,8.5"/></svg>`,
+  online: `<svg ${ICON_SVG_WRAP}><circle cx="10" cy="15" r="1.3" fill="currentColor" stroke="none"/><path d="M6 12c1.1-1 2.5-1.6 4-1.6s2.9.6 4 1.6"/><path d="M3 9c1.9-1.9 4.4-3 7-3s5.1 1.1 7 3"/></svg>`,
   tables: `<svg ${ICON_SVG_WRAP}><circle cx="10" cy="10" r="5"/><circle cx="10" cy="2.2" r="1" fill="currentColor" stroke="none"/><circle cx="10" cy="17.8" r="1" fill="currentColor" stroke="none"/><circle cx="2.2" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="17.8" cy="10" r="1" fill="currentColor" stroke="none"/></svg>`,
   kds: `<svg ${ICON_SVG_WRAP}><rect x="3" y="8" width="14" height="8" rx="1.5"/><line x1="1" y1="8" x2="3" y2="8"/><line x1="17" y1="8" x2="19" y2="8"/><path d="M6 8V6a4 4 0 018 0v2"/></svg>`,
   menu: `<svg ${ICON_SVG_WRAP}><path d="M10 4C8 2.5 5 2 2 2v13c3 0 6 .5 8 2 2-1.5 5-2 8-2V2c-3 0-6 .5-8 2z"/><line x1="10" y1="4" x2="10" y2="17"/></svg>`,
@@ -67,6 +68,7 @@ const NAV = [
   { id: 'dashboard', label: 'Dashboard', roles: ['admin','manager','cashier','waiter','kitchen'] },
   { id: 'pos', label: 'New Order', roles: ['admin','manager','cashier','waiter'] },
   { id: 'orders', label: 'Orders', roles: ['admin','manager','cashier','waiter'] },
+  { id: 'online', label: 'Online Orders', roles: ['admin','manager','cashier','waiter'] },
   { id: 'tables', label: 'Tables', roles: ['admin','manager','cashier','waiter'] },
   { id: 'kds', label: 'Kitchen (KDS)', roles: ['admin','manager','kitchen'] },
   { id: 'menu', label: 'Menu', roles: ['admin','manager'] },
@@ -80,9 +82,27 @@ const NAV = [
 function buildNav() {
   const nav = $('#nav'); nav.innerHTML = '';
   NAV.filter(n => n.roles.includes(API.user.role)).forEach(n => {
-    nav.append(el('div', { class: 'nav-item', 'data-view': n.id, onClick: () => go(n.id) },
-      el('span', { class: 'ic', html: ICONS[n.id] }), el('span', {}, n.label)));
+    const item = el('div', { class: 'nav-item', 'data-view': n.id, onClick: () => go(n.id) },
+      el('span', { class: 'ic', html: ICONS[n.id] }), el('span', {}, n.label));
+    if (n.id === 'online') item.append(el('span', { class: 'nav-badge hidden', id: 'onlineBadge' }, '0'));
+    nav.append(item);
   });
+}
+
+// Poll for new online orders so staff get notified app-wide, not just while viewing the tab
+let onlineOrderCount = null;
+async function pollOnlineOrders() {
+  if (!NAV.find(n => n.id === 'online').roles.includes(API.user.role)) return;
+  try {
+    const pending = await API.get('/orders?status=pending&source=online');
+    const badge = $('#onlineBadge');
+    if (badge) {
+      if (pending.length > 0) { badge.textContent = String(pending.length); badge.classList.remove('hidden'); }
+      else badge.classList.add('hidden');
+    }
+    if (onlineOrderCount !== null && pending.length > onlineOrderCount) toast('🔔 New online order received!');
+    onlineOrderCount = pending.length;
+  } catch (e) { /* ignore transient poll failures */ }
 }
 
 const VIEWS = {};
@@ -101,6 +121,8 @@ async function startApp() {
   try { const s = await API.get('/settings'); CUR = s.currency || '$'; applyLogo(s.logo || ''); applyBrandName(s.restaurant_name); } catch {}
   buildNav();
   go('dashboard');
+  pollOnlineOrders();
+  setInterval(pollOnlineOrders, 15000);
 }
 
 // ================= DASHBOARD =================
@@ -278,6 +300,46 @@ async function payOrder(id) {
   ]);
 }
 
+// ================= ONLINE ORDERS =================
+let onlineTimer = null;
+VIEWS.online = async (v) => {
+  clearInterval(onlineTimer);
+  const render = async () => {
+    const [orders, tables] = await Promise.all([API.get('/orders?status=pending&source=online'), API.get('/tables')]);
+    v.innerHTML = '';
+    v.append(el('div', { class: 'toolbar' }, el('span', { class: 'section-title', style: 'margin:0' }, 'Online Orders'),
+      el('span', { class: 'muted' }, ' · auto-refresh 8s')));
+    if (!orders.length) { v.append(el('p', { class: 'muted' }, 'No pending online orders 🎉')); return; }
+    const grid = el('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fill,minmax(300px,1fr))' });
+    orders.forEach(o => {
+      const tbl = tables.find(t => t.id === o.table_id);
+      const mins = Math.floor((Date.now() - new Date(o.created_at.replace(' ', 'T') + 'Z')) / 60000);
+      const card = el('div', { class: 'card' });
+      card.append(el('div', { class: 'row between' }, el('strong', {}, o.code), el('span', { class: 'muted' }, mins + 'm ago')));
+      card.append(el('p', {}, '🍽️ Table ' + (tbl ? tbl.name : '—')));
+      card.append(el('p', {}, o.customer_name || '—', el('br', {}),
+        el('small', { class: 'muted' }, [o.customer_email, o.customer_phone].filter(Boolean).join(' · '))));
+      const ul = el('ul', { style: 'margin:8px 0;padding-left:18px' });
+      o.items.forEach(i => ul.append(el('li', {}, `${i.qty}× ${i.name}`)));
+      card.append(ul);
+      if (o.notes) card.append(el('p', { class: 'muted' }, '📝 ' + o.notes));
+      card.append(el('div', { class: 'tot-row big' }, el('span', {}, 'Total'), el('span', {}, money(o.total))));
+      const acts = el('div', { class: 'row', style: 'margin-top:10px' });
+      acts.append(el('button', { class: 'btn primary', onClick: async () => {
+        await API.post(`/orders/${o.id}/send-kitchen`); toast('Order accepted'); render();
+      } }, '✔ Accept'));
+      acts.append(el('button', { class: 'btn danger', onClick: () => confirmDialog('Reject this order?', async () => {
+        await API.post(`/orders/${o.id}/reject`); toast('Order rejected'); render();
+      }) }, '✕ Reject'));
+      card.append(acts);
+      grid.append(card);
+    });
+    v.append(grid);
+  };
+  await render();
+  onlineTimer = setInterval(render, 8000);
+};
+
 // ================= TABLES =================
 VIEWS.tables = async (v) => {
   const tables = await API.get('/tables');
@@ -309,6 +371,10 @@ function tableActions(t) {
   const statusSel = el('select');
   ['available','occupied','reserved','cleaning'].forEach(s => statusSel.append(el('option', { value: s, selected: s === t.status }, s)));
   c.append(el('label', {}, 'Set Status'), statusSel);
+  const linkBox = el('input', { type: 'text', readOnly: true, value: location.origin + '/order.html?table=' + t.id });
+  c.append(el('label', {}, 'Ordering Link (QR / tablet)'),
+    el('div', { class: 'row' }, linkBox, el('button', { class: 'btn sm', onClick: () => copyToClipboard(linkBox.value) }, 'Copy')),
+    el('p', { class: 'muted', style: 'font-size:12px;margin-top:4px' }, 'Encode this link with any QR generator and print it for this table.'));
   const acts = [{ label: 'Close', onClick: closeModal },
     { label: 'New Order', primary: true, onClick: () => { closeModal(); cartTable = t.id; go('pos'); } },
     { label: 'Save', onClick: async () => { await API.put('/tables/' + t.id, { status: statusSel.value }); closeModal(); toast('Updated'); go('tables'); } }];
@@ -694,6 +760,39 @@ VIEWS.settings = async (v) => {
     }
   } }, 'Save Settings'), settingsErr);
 
+  const onlineEnabled = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
+  onlineEnabled.checked = s.online_ordering_enabled === '1';
+  const stripeSecret = el('input', { type: 'password',
+    placeholder: s.stripe_secret_key_set ? 'Saved — leave blank to keep' : 'sk_live_… or sk_test_…' });
+  const stripeWebhook = el('input', { type: 'password',
+    placeholder: s.stripe_webhook_secret_set ? 'Saved — leave blank to keep' : 'whsec_…' });
+  const stripeCurrency = el('input', { type: 'text', value: s.stripe_currency || 'usd', placeholder: 'usd' });
+  const webhookUrlBox = el('input', { type: 'text', readOnly: true, value: location.origin + '/api/public/stripe-webhook' });
+  const onlineErr = el('div', { class: 'err' });
+  const onlineCard = el('div', { class: 'card', style: 'max-width:520px;margin-top:16px' },
+    el('div', { class: 'section-title', style: 'margin-top:0' }, 'Online Dine-In Ordering'),
+    el('label', { class: 'row', style: 'gap:8px' }, onlineEnabled, 'Enable online ordering (QR / tablet)'),
+    el('p', { class: 'muted', style: 'margin:8px 0' },
+      'Customers order via each table\'s link (see Tables) and pay through Stripe Checkout before it reaches your Online Orders queue.'),
+    el('label', {}, 'Stripe Secret Key'), stripeSecret,
+    el('label', {}, 'Stripe Webhook Secret'), stripeWebhook,
+    el('label', {}, 'Currency Code (ISO, e.g. usd)'), stripeCurrency,
+    el('label', {}, 'Webhook URL — add this in your Stripe Dashboard, subscribed to checkout.session.completed'),
+    el('div', { class: 'row' }, webhookUrlBox, el('button', { class: 'btn sm', onClick: () => copyToClipboard(webhookUrlBox.value) }, 'Copy')),
+    el('button', { class: 'btn primary', style: 'margin-top:16px', onClick: async (e) => {
+      onlineErr.textContent = '';
+      const btn = e.target; btn.disabled = true;
+      try {
+        const body = { online_ordering_enabled: onlineEnabled.checked ? '1' : '0', stripe_currency: stripeCurrency.value };
+        if (stripeSecret.value) body.stripe_secret_key = stripeSecret.value;
+        if (stripeWebhook.value) body.stripe_webhook_secret = stripeWebhook.value;
+        await API.put('/settings', body);
+        toast('Online ordering settings saved');
+      } catch (err) { onlineErr.textContent = err.message; }
+      finally { btn.disabled = false; }
+    } }, 'Save Online Ordering Settings'),
+    onlineErr);
+
   const smtpInputs = {};
   const smtpCard = el('div', { class: 'card', style: 'max-width:520px;margin-top:16px' },
     el('div', { class: 'section-title', style: 'margin-top:0' }, 'Email (SMTP) Configuration'));
@@ -778,7 +877,7 @@ VIEWS.settings = async (v) => {
       } catch (e) { passErr.textContent = e.message; }
     } }, 'Update Password'));
 
-  v.append(logoCard, card, smtpCard, passCard, backup);
+  v.append(logoCard, card, onlineCard, smtpCard, passCard, backup);
 };
 
 // ---------- Boot ----------
