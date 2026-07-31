@@ -453,8 +453,11 @@ VIEWS.kds = async (v) => {
     if (sig === kdsSig) return; // nothing changed — skip the rebuild so the screen doesn't flicker
     kdsSig = sig;
     v.innerHTML = '';
-    v.append(el('div', { class: 'toolbar' }, el('span', { class: 'section-title', style: 'margin:0' }, 'Kitchen Display'),
-      el('span', { class: 'muted' }, ' · auto-refresh 5s')));
+    const toolbar = el('div', { class: 'toolbar' }, el('span', { class: 'section-title', style: 'margin:0' }, 'Kitchen Display'),
+      el('span', { class: 'muted' }, ' · auto-refresh 5s'));
+    if (API.user.role === 'admin')
+      toolbar.append(el('div', { class: 'spacer' }), el('button', { class: 'btn', onClick: () => showKdsSummary(orders) }, '📋 Summary'));
+    v.append(toolbar);
     const grid = el('div', { class: 'kds-grid' });
     if (!orders.length) grid.append(el('p', { class: 'muted' }, 'No active kitchen orders 🎉'));
     orders.forEach(o => {
@@ -478,6 +481,19 @@ VIEWS.kds = async (v) => {
   await render();
   kdsTimer = setInterval(render, 5000);
 };
+function showKdsSummary(orders) {
+  const counts = {};
+  orders.forEach(o => o.items.forEach(i => { counts[i.name] = (counts[i.name] || 0) + i.qty; }));
+  const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const c = el('div');
+  if (!rows.length) c.append(el('p', { class: 'muted' }, 'No active items to prepare'));
+  else {
+    const t = el('table'); t.innerHTML = '<tr><th>Item</th><th>Total Qty</th></tr>';
+    rows.forEach(([name, qty]) => t.insertAdjacentHTML('beforeend', `<tr><td>${name}</td><td>${qty}</td></tr>`));
+    c.append(t);
+  }
+  modal('Kitchen Summary · Prep Sheet', c, [{ label: 'Close', onClick: closeModal }]);
+}
 
 // ================= MENU MANAGEMENT =================
 VIEWS.menu = async (v) => {
@@ -797,17 +813,42 @@ VIEWS.settings = async (v) => {
   } }, 'Remove');
   logoCard.append(el('div', { class: 'logo-upload' }, preview, emptyState, fileInput, removeBtn));
 
-  const fields = [['restaurant_name','Restaurant Name'],['admin_email','Admin Email'],['address','Address'],['phone','Phone'],
-    ['currency','Currency Symbol'],['timezone','Time Zone'],['language','Language'],['receipt_footer','Receipt Footer']];
+  const fieldsBefore = [['restaurant_name','Restaurant Name'],['admin_email','Admin Email'],['address','Address'],['phone','Phone']];
+  const fieldsAfter = [['language','Language'],['receipt_footer','Receipt Footer']];
   const card = el('div', { class: 'card', style: 'max-width:520px' });
   const inputs = {};
-  fields.forEach(([k, l]) => { const i = el('input', { type: k === 'admin_email' ? 'email' : 'text', value: s[k] || '' }); inputs[k] = i; card.append(el('label', {}, l), i); });
+  const addInput = ([k, l]) => { const i = el('input', { type: k === 'admin_email' ? 'email' : 'text', value: s[k] || '' }); inputs[k] = i; card.append(el('label', {}, l), i); };
+  fieldsBefore.forEach(addInput);
+
+  const CURRENCIES = [
+    ['$','USD ($) — US Dollar'], ['A$','AUD (A$) — Australian Dollar'], ['£','GBP (£) — British Pound'],
+    ['€','EUR (€) — Euro'], ['C$','CAD (C$) — Canadian Dollar'], ['NZ$','NZD (NZ$) — New Zealand Dollar'],
+    ['¥','JPY (¥) — Japanese Yen'], ['S$','SGD (S$) — Singapore Dollar'], ['Rs','LKR (Rs) — Sri Lankan Rupee'],
+    ['₹','INR (₹) — Indian Rupee'], ['R','ZAR (R) — South African Rand'], ['฿','THB (฿) — Thai Baht'],
+    ['RM','MYR (RM) — Malaysian Ringgit'], ['₱','PHP (₱) — Philippine Peso'], ['₦','NGN (₦) — Nigerian Naira'],
+    ['₩','KRW (₩) — South Korean Won'], ['د.إ','AED (د.إ) — UAE Dirham'],
+  ];
+  const currencySel = el('select');
+  CURRENCIES.forEach(([sym, lbl]) => currencySel.append(el('option', { value: sym, selected: (s.currency || '$') === sym }, lbl)));
+  card.append(el('label', {}, 'Currency'), currencySel);
+
+  const timezoneList = (() => { try { const l = Intl.supportedValuesOf('timeZone'); if (l && l.length) return l; } catch (e) {}
+    return ['UTC','Pacific/Auckland','Australia/Sydney','Australia/Melbourne','Australia/Brisbane','Australia/Perth',
+      'Asia/Colombo','Asia/Kolkata','Asia/Dubai','Asia/Singapore','Asia/Tokyo','Asia/Shanghai',
+      'Europe/London','Europe/Paris','Europe/Berlin','Africa/Johannesburg',
+      'America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Toronto']; })();
+  const timezoneSel = el('select');
+  timezoneList.forEach(tz => timezoneSel.append(el('option', { value: tz, selected: (s.timezone || 'UTC') === tz }, tz)));
+  card.append(el('label', {}, 'Time Zone'), timezoneSel);
+
+  fieldsAfter.forEach(addInput);
   const settingsErr = el('div', { class: 'err' });
   card.append(el('button', { class: 'btn primary', style: 'margin-top:16px', onClick: async (e) => {
     settingsErr.textContent = '';
     const btn = e.target; btn.disabled = true;
     try {
       const body = {}; Object.entries(inputs).forEach(([k, i]) => body[k] = i.value);
+      body.currency = currencySel.value; body.timezone = timezoneSel.value;
       body.logo = logo;
       await API.put('/settings', body);
       CUR = body.currency || '$'; applyLogo(logo); applyBrandName(body.restaurant_name);
