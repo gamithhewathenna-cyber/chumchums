@@ -14,12 +14,25 @@ async function doLogin() {
   const password = $('#loginPass').value;
   try {
     const { token, user } = await API.post('/auth/login', { username, password });
-    API.setAuth(token, user);
+    API.setAuth(token, user, $('#rememberMe').checked);
     startApp();
   } catch (e) { $('#loginErr').textContent = e.message; }
 }
 $('#loginBtn').onclick = doLogin;
 $('#loginPass').addEventListener('keydown', e => e.key === 'Enter' && doLogin());
+
+$('#togglePass').onclick = () => {
+  const showing = $('#loginPass').type === 'text';
+  $('#loginPass').type = showing ? 'password' : 'text';
+  $('#togglePass').textContent = showing ? '👁' : '🙈';
+  $('#togglePass').setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+};
+
+$('#forgotPass').onclick = (e) => {
+  e.preventDefault();
+  modal('Forgot Password', el('p', {}, 'Passwords can\'t be reset by email on this system. Please contact your manager or admin — they can set a new password for you from Staff, or an admin can reset it directly in the database.'),
+    [{ label: 'Close', primary: true, onClick: closeModal }]);
+};
 
 $('#logoutBtn').onclick = () => { API.clearAuth(); location.reload(); };
 $('#themeBtn').onclick = () =>
@@ -648,7 +661,27 @@ VIEWS.settings = async (v) => {
       const a = el('a', { href: URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })),
         download: 'pos-backup-' + new Date().toISOString().slice(0, 10) + '.json' }); a.click();
     } }, '⬇ Download Backup'));
-  v.append(logoCard, card, backup);
+
+  const curPass = el('input', { type: 'password', placeholder: 'Current password' });
+  const newPass = el('input', { type: 'password', placeholder: 'New password (min 6 characters)' });
+  const confPass = el('input', { type: 'password', placeholder: 'Confirm new password' });
+  const passErr = el('div', { class: 'err' });
+  const passCard = el('div', { class: 'card', style: 'max-width:520px;margin-top:16px' },
+    el('div', { class: 'section-title', style: 'margin-top:0' }, 'Change My Password'),
+    el('label', {}, 'Current Password'), curPass,
+    el('label', {}, 'New Password'), newPass,
+    el('label', {}, 'Confirm New Password'), confPass, passErr,
+    el('button', { class: 'btn primary', style: 'margin-top:16px', onClick: async () => {
+      passErr.textContent = '';
+      if (newPass.value !== confPass.value) { passErr.textContent = 'New passwords do not match'; return; }
+      try {
+        await API.put('/auth/password', { current_password: curPass.value, new_password: newPass.value });
+        curPass.value = ''; newPass.value = ''; confPass.value = '';
+        toast('Password updated');
+      } catch (e) { passErr.textContent = e.message; }
+    } }, 'Update Password'));
+
+  v.append(logoCard, card, passCard, backup);
 };
 
 // ---------- Boot ----------

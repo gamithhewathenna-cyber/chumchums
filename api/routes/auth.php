@@ -18,6 +18,21 @@ if ($sub === 'login' && $method === 'POST') {
 // GET /auth/me
 if ($sub === 'me' && $method === 'GET') json_out(require_auth());
 
+// PUT /auth/password — self-service password change (any logged-in user)
+if ($sub === 'password' && $method === 'PUT') {
+  $u = require_auth();
+  $cur = one("SELECT * FROM users WHERE id=?", [$u['id']]);
+  $curPass = inp('current_password', '');
+  $newPass = inp('new_password', '');
+  if (!$cur || !password_verify($curPass, $cur['password']))
+    json_out(['error' => 'Current password is incorrect'], 400);
+  if (strlen($newPass) < 6)
+    json_out(['error' => 'New password must be at least 6 characters'], 400);
+  q("UPDATE users SET password=? WHERE id=?", [password_hash($newPass, PASSWORD_DEFAULT), $u['id']]);
+  audit('change_own_password');
+  json_out(['ok' => true]);
+}
+
 // ---- Users / staff ----
 if ($sub === 'users') {
   if ($method === 'GET') {

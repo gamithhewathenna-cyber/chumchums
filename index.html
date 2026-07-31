@@ -13,7 +13,14 @@
       <div class="brand"><span class="logo" id="loginLogo">🍽️</span><h1 id="loginBrandName">Fork POS</h1></div>
       <p class="muted">Sign in to your terminal</p>
       <input id="loginUser" placeholder="Username" autocomplete="username" />
-      <input id="loginPass" type="password" placeholder="Password" autocomplete="current-password" />
+      <div class="pass-wrap">
+        <input id="loginPass" type="password" placeholder="Password" autocomplete="current-password" />
+        <button type="button" id="togglePass" class="pass-toggle" aria-label="Show password">👁</button>
+      </div>
+      <div class="login-row">
+        <label class="remember-me"><input type="checkbox" id="rememberMe" checked /> Remember me</label>
+        <a href="#" id="forgotPass" class="forgot-link">Forgot password?</a>
+      </div>
       <button id="loginBtn" class="btn primary block">Sign In</button>
       <div id="loginErr" class="err"></div>
       <div class="hint muted">Demo: admin / admin123</div>
