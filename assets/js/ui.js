@@ -21,6 +21,13 @@ function applyLogo(dataUrl) {
   });
 }
 
+function applyBrandName(name) {
+  if (!name) return;
+  document.title = name;
+  const login = document.getElementById('loginBrandName'); if (login) login.textContent = name;
+  const side = document.getElementById('sidebarBrandName'); if (side) side.textContent = name;
+}
+
 let CUR = '$';
 const money = n => CUR + Number(n || 0).toFixed(2);
 const fmtDate = s => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleString() : '';

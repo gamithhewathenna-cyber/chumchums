@@ -5,8 +5,8 @@ function applyTheme(t) {
 }
 applyTheme(localStorage.getItem('pos_theme') || 'dark');
 
-// Show the saved logo on the login screen even before signing in
-API.get('/settings/public').then(s => s.logo && applyLogo(s.logo)).catch(() => {});
+// Show the saved logo/name on the login screen even before signing in
+API.get('/settings/public').then(s => { if (s.logo) applyLogo(s.logo); applyBrandName(s.restaurant_name); }).catch(() => {});
 
 // ---------- Auth ----------
 async function doLogin() {
@@ -71,7 +71,7 @@ async function startApp() {
   $('#login').classList.add('hidden');
   $('#app').classList.remove('hidden');
   $('#userChip').textContent = `${API.user.name} · ${API.user.role}`;
-  try { const s = await API.get('/settings'); CUR = s.currency || '$'; applyLogo(s.logo || ''); } catch {}
+  try { const s = await API.get('/settings'); CUR = s.currency || '$'; applyLogo(s.logo || ''); applyBrandName(s.restaurant_name); } catch {}
   buildNav();
   go('dashboard');
 }
@@ -636,7 +636,7 @@ VIEWS.settings = async (v) => {
   card.append(el('button', { class: 'btn primary', style: 'margin-top:16px', onClick: async () => {
     const body = {}; Object.entries(inputs).forEach(([k, i]) => body[k] = i.value);
     body.logo = logo;
-    await API.put('/settings', body); CUR = body.currency || '$'; applyLogo(logo); toast('Settings saved');
+    await API.put('/settings', body); CUR = body.currency || '$'; applyLogo(logo); applyBrandName(body.restaurant_name); toast('Settings saved');
   } }, 'Save Settings'));
 
   const backup = el('div', { class: 'card', style: 'max-width:520px;margin-top:16px' },
