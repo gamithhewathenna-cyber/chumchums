@@ -677,6 +677,57 @@ VIEWS.settings = async (v) => {
     }
   } }, 'Save Settings'), settingsErr);
 
+  const smtpFields = [['smtp_host','SMTP Host'],['smtp_port','SMTP Port'],['smtp_user','SMTP Username'],
+    ['smtp_from_email','From Email'],['smtp_from_name','From Name']];
+  const smtpInputs = {};
+  const smtpCard = el('div', { class: 'card', style: 'max-width:520px;margin-top:16px' },
+    el('div', { class: 'section-title', style: 'margin-top:0' }, 'Email (SMTP) Configuration'));
+  smtpFields.forEach(([k, l]) => {
+    const type = k === 'smtp_port' ? 'number' : (k === 'smtp_from_email' ? 'email' : 'text');
+    const dflt = k === 'smtp_port' ? '587' : '';
+    const i = el('input', { type, value: s[k] || dflt });
+    smtpInputs[k] = i; smtpCard.append(el('label', {}, l), i);
+  });
+  const smtpPass = el('input', { type: 'password',
+    placeholder: s.smtp_pass_set ? 'Saved — leave blank to keep' : 'SMTP Password' });
+  const secureSel = el('select');
+  [['none','None'],['ssl','SSL'],['tls','TLS (STARTTLS)']].forEach(([val, lbl]) =>
+    secureSel.append(el('option', { value: val, selected: (s.smtp_secure || 'tls') === val }, lbl)));
+  const testTo = el('input', { type: 'email', placeholder: 'Send test to…', value: s.admin_email || '' });
+  const smtpErr = el('div', { class: 'err' });
+  smtpCard.append(
+    el('label', {}, 'SMTP Password'), smtpPass,
+    el('label', {}, 'Encryption'), secureSel,
+    el('label', {}, 'Test Recipient'), testTo,
+    el('div', { class: 'row', style: 'margin-top:16px' },
+      el('button', { class: 'btn primary', onClick: async (e) => {
+        smtpErr.textContent = '';
+        const btn = e.target; btn.disabled = true;
+        try {
+          const body = {}; Object.entries(smtpInputs).forEach(([k, i]) => body[k] = i.value);
+          body.smtp_secure = secureSel.value;
+          if (smtpPass.value) body.smtp_pass = smtpPass.value;
+          await API.put('/settings', body);
+          toast('Email settings saved');
+        } catch (err) { smtpErr.textContent = err.message; }
+        finally { btn.disabled = false; }
+      } }, 'Save Email Settings'),
+      el('button', { class: 'btn', onClick: async (e) => {
+        smtpErr.textContent = '';
+        if (!testTo.value) { smtpErr.textContent = 'Enter a recipient for the test email'; return; }
+        const btn = e.target; btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Sending…';
+        try {
+          const body = {}; Object.entries(smtpInputs).forEach(([k, i]) => body[k] = i.value);
+          body.smtp_secure = secureSel.value;
+          if (smtpPass.value) body.smtp_pass = smtpPass.value;
+          body.test_to = testTo.value;
+          await API.post('/settings/test-email', body);
+          toast('Test email sent — check the inbox');
+        } catch (err) { smtpErr.textContent = err.message; }
+        finally { btn.disabled = false; btn.textContent = orig; }
+      } }, '✉ Send Test Email')),
+    smtpErr);
+
   const backup = el('div', { class: 'card', style: 'max-width:520px;margin-top:16px' },
     el('div', { class: 'section-title', style: 'margin-top:0' }, 'Backup & Restore'),
     el('p', { class: 'muted', style: 'margin-bottom:10px' }, 'Download a full JSON backup of your data.'));
@@ -706,7 +757,7 @@ VIEWS.settings = async (v) => {
       } catch (e) { passErr.textContent = e.message; }
     } }, 'Update Password'));
 
-  v.append(logoCard, card, passCard, backup);
+  v.append(logoCard, card, smtpCard, passCard, backup);
 };
 
 // ---------- Boot ----------

@@ -89,10 +89,29 @@ if ($resource === 'settings') {
     foreach (all("SELECT skey,svalue FROM settings WHERE skey IN ('logo','restaurant_name')") as $r) $s[$r['skey']] = $r['svalue'];
     json_out($s);
   }
+  if (($seg[1] ?? '') === 'test-email' && $method === 'POST') {
+    require_role(['admin','manager']);
+    require __DIR__ . '/../lib/mailer.php';
+    $saved = [];
+    foreach (all("SELECT skey,svalue FROM settings") as $r) $saved[$r['skey']] = $r['svalue'];
+    $b = body();
+    $cfg = $saved;
+    foreach (['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_secure','smtp_from_email','smtp_from_name'] as $k) {
+      if (array_key_exists($k, $b) && $b[$k] !== '') $cfg[$k] = $b[$k];
+    }
+    $to = trim($b['test_to'] ?? '');
+    if (!$to || !filter_var($to, FILTER_VALIDATE_EMAIL)) json_out(['error' => 'Enter a valid test recipient email'], 400);
+    [$ok, $msg] = smtp_send($cfg, $to, 'Fork POS — Test Email',
+      "This is a test email from your Fork POS system.\n\nIf you received this, your SMTP settings are working correctly.");
+    if (!$ok) json_out(['error' => $msg], 400);
+    audit('send_test_email', $to);
+    json_out(['ok' => true]);
+  }
   if ($method === 'GET') {
     require_auth();
     $s = [];
     foreach (all("SELECT skey,svalue FROM settings") as $r) $s[$r['skey']] = $r['svalue'];
+    if (isset($s['smtp_pass'])) { $s['smtp_pass_set'] = $s['smtp_pass'] !== ''; unset($s['smtp_pass']); }
     json_out($s);
   }
   if ($method === 'PUT') {
