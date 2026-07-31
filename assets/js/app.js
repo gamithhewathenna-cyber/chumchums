@@ -49,25 +49,39 @@ $('#clockBtn').onclick = () => {
 };
 
 // ---------- Navigation ----------
+const ICON_SVG_WRAP = 'viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"';
+const ICONS = {
+  dashboard: `<svg ${ICON_SVG_WRAP}><rect x="2" y="2" width="7" height="7" rx="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5"/></svg>`,
+  pos: `<svg ${ICON_SVG_WRAP}><rect x="2" y="2" width="16" height="16" rx="4"/><line x1="10" y1="6" x2="10" y2="14"/><line x1="6" y1="10" x2="14" y2="10"/></svg>`,
+  orders: `<svg ${ICON_SVG_WRAP}><rect x="4" y="3" width="12" height="15" rx="1.5"/><rect x="7" y="1.3" width="6" height="3" rx="1"/><polyline points="7,11 9,13 13,8.5"/></svg>`,
+  tables: `<svg ${ICON_SVG_WRAP}><circle cx="10" cy="10" r="5"/><circle cx="10" cy="2.2" r="1" fill="currentColor" stroke="none"/><circle cx="10" cy="17.8" r="1" fill="currentColor" stroke="none"/><circle cx="2.2" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="17.8" cy="10" r="1" fill="currentColor" stroke="none"/></svg>`,
+  kds: `<svg ${ICON_SVG_WRAP}><rect x="3" y="8" width="14" height="8" rx="1.5"/><line x1="1" y1="8" x2="3" y2="8"/><line x1="17" y1="8" x2="19" y2="8"/><path d="M6 8V6a4 4 0 018 0v2"/></svg>`,
+  menu: `<svg ${ICON_SVG_WRAP}><path d="M10 4C8 2.5 5 2 2 2v13c3 0 6 .5 8 2 2-1.5 5-2 8-2V2c-3 0-6 .5-8 2z"/><line x1="10" y1="4" x2="10" y2="17"/></svg>`,
+  inventory: `<svg ${ICON_SVG_WRAP}><path d="M10 2l8 4v8l-8 4-8-4V6z"/><polyline points="2,6 10,10 18,6"/><line x1="10" y1="10" x2="10" y2="18"/></svg>`,
+  customers: `<svg ${ICON_SVG_WRAP}><circle cx="7" cy="6" r="3"/><path d="M1 18c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="15" cy="7" r="2.3"/><path d="M13.5 12.2c2.6.4 4.5 2.7 4.5 5.3"/></svg>`,
+  staff: `<svg ${ICON_SVG_WRAP}><rect x="3" y="2" width="14" height="16" rx="2"/><circle cx="10" cy="8" r="2.5"/><path d="M6 15c0-2.2 1.8-4 4-4s4 1.8 4 4"/></svg>`,
+  reports: `<svg ${ICON_SVG_WRAP}><line x1="2" y1="17" x2="18" y2="17"/><rect x="4" y="11" width="3" height="6"/><rect x="9" y="7" width="3" height="10"/><rect x="14" y="3" width="3" height="14"/></svg>`,
+  settings: `<svg ${ICON_SVG_WRAP}><line x1="2" y1="5" x2="18" y2="5"/><circle cx="7" cy="5" r="2"/><line x1="2" y1="10" x2="18" y2="10"/><circle cx="13" cy="10" r="2"/><line x1="2" y1="15" x2="18" y2="15"/><circle cx="9" cy="15" r="2"/></svg>`,
+};
 const NAV = [
-  { id: 'dashboard', label: 'Dashboard', ic: '📊', roles: ['admin','manager','cashier','waiter','kitchen'] },
-  { id: 'pos', label: 'New Order', ic: '🧾', roles: ['admin','manager','cashier','waiter'] },
-  { id: 'orders', label: 'Orders', ic: '📋', roles: ['admin','manager','cashier','waiter'] },
-  { id: 'tables', label: 'Tables', ic: '🍽️', roles: ['admin','manager','cashier','waiter'] },
-  { id: 'kds', label: 'Kitchen (KDS)', ic: '👨‍🍳', roles: ['admin','manager','kitchen'] },
-  { id: 'menu', label: 'Menu', ic: '📖', roles: ['admin','manager'] },
-  { id: 'inventory', label: 'Inventory', ic: '📦', roles: ['admin','manager'] },
-  { id: 'customers', label: 'Customers', ic: '👥', roles: ['admin','manager','cashier'] },
-  { id: 'staff', label: 'Staff', ic: '🧑‍💼', roles: ['admin','manager'] },
-  { id: 'reports', label: 'Reports', ic: '📈', roles: ['admin','manager'] },
-  { id: 'settings', label: 'Settings', ic: '⚙️', roles: ['admin','manager'] },
+  { id: 'dashboard', label: 'Dashboard', roles: ['admin','manager','cashier','waiter','kitchen'] },
+  { id: 'pos', label: 'New Order', roles: ['admin','manager','cashier','waiter'] },
+  { id: 'orders', label: 'Orders', roles: ['admin','manager','cashier','waiter'] },
+  { id: 'tables', label: 'Tables', roles: ['admin','manager','cashier','waiter'] },
+  { id: 'kds', label: 'Kitchen (KDS)', roles: ['admin','manager','kitchen'] },
+  { id: 'menu', label: 'Menu', roles: ['admin','manager'] },
+  { id: 'inventory', label: 'Inventory', roles: ['admin','manager'] },
+  { id: 'customers', label: 'Customers', roles: ['admin','manager','cashier'] },
+  { id: 'staff', label: 'Staff', roles: ['admin','manager'] },
+  { id: 'reports', label: 'Reports', roles: ['admin','manager'] },
+  { id: 'settings', label: 'Settings', roles: ['admin','manager'] },
 ];
 
 function buildNav() {
   const nav = $('#nav'); nav.innerHTML = '';
   NAV.filter(n => n.roles.includes(API.user.role)).forEach(n => {
     nav.append(el('div', { class: 'nav-item', 'data-view': n.id, onClick: () => go(n.id) },
-      el('span', { class: 'ic' }, n.ic), el('span', {}, n.label)));
+      el('span', { class: 'ic', html: ICONS[n.id] }), el('span', {}, n.label)));
   });
 }
 
