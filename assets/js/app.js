@@ -39,10 +39,6 @@ $('#themeBtn').onclick = () =>
   applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
 $('#menuToggle').onclick = () => $('#sidebar').classList.toggle('open');
 
-let notifyDismissedCount = 0;
-$('#notifyView').onclick = () => { $('#notifyBar').classList.add('hidden'); go('online'); };
-$('#notifyDismiss').onclick = () => { notifyDismissedCount = onlineOrderCount || 0; $('#notifyBar').classList.add('hidden'); };
-
 $('#clockBtn').onclick = () => {
   const c = el('div');
   c.append(el('p', { class: 'muted' }, 'Record your shift time:'));
@@ -83,40 +79,81 @@ const NAV = [
   { id: 'settings', label: 'Settings', roles: ['admin','manager'] },
 ];
 
+const NAV_BADGE_IDS = { online: 'onlineBadge', kds: 'kdsBadge', orders: 'ordersBadge' };
 function buildNav() {
   const nav = $('#nav'); nav.innerHTML = '';
   NAV.filter(n => n.roles.includes(API.user.role)).forEach(n => {
     const item = el('div', { class: 'nav-item', 'data-view': n.id, onClick: () => go(n.id) },
       el('span', { class: 'ic', html: ICONS[n.id] }), el('span', {}, n.label));
-    if (n.id === 'online') item.append(el('span', { class: 'nav-badge hidden', id: 'onlineBadge' }, '0'));
+    if (NAV_BADGE_IDS[n.id]) item.append(el('span', { class: 'nav-badge hidden', id: NAV_BADGE_IDS[n.id] }, '0'));
     nav.append(item);
   });
 }
 
-// Poll for new online orders so staff get notified app-wide, not just while viewing the tab
-let onlineOrderCount = null;
-async function pollOnlineOrders() {
-  if (!NAV.find(n => n.id === 'online').roles.includes(API.user.role)) return;
-  try {
-    const pending = await API.get('/orders?status=pending&source=online');
-    const badge = $('#onlineBadge');
-    if (badge) {
-      if (pending.length > 0) { badge.textContent = String(pending.length); badge.classList.remove('hidden'); }
-      else badge.classList.add('hidden');
-    }
-    if (onlineOrderCount !== null && pending.length > onlineOrderCount) toast('🔔 New online order received!');
-    onlineOrderCount = pending.length;
+// ---------- App-wide notifications: new online orders, new kitchen tickets, ready-to-serve ----------
+const NOTIFY_TYPES = {
+  online:  { icon: '🔔', view: 'online', label: n => `${n} new online order${n > 1 ? 's' : ''} waiting for review` },
+  kitchen: { icon: '👨‍🍳', view: 'kds', cls: 'b-kitchen', label: n => `${n} new order${n > 1 ? 's' : ''} sent to the kitchen` },
+  ready:   { icon: '🍽️', view: 'orders', cls: 'b-ready', label: n => `${n} order${n > 1 ? 's' : ''} ready to serve` },
+};
+const notifyState = { online: { count: null, dismissedAt: 0 }, kitchen: { count: null, dismissedAt: 0 }, ready: { count: null, dismissedAt: 0 } };
 
-    const bar = $('#notifyBar');
-    if (pending.length === 0) {
-      notifyDismissedCount = 0; bar.classList.add('hidden');
-    } else if (pending.length > notifyDismissedCount) {
-      $('#notifyText').textContent = `🔔 ${pending.length} new online order${pending.length > 1 ? 's' : ''} waiting for review`;
-      bar.classList.remove('hidden');
-    } else {
-      bar.classList.add('hidden');
+function renderNotifyBar() {
+  const bar = $('#notifyBar'); bar.innerHTML = '';
+  Object.entries(NOTIFY_TYPES).forEach(([key, cfg]) => {
+    const st = notifyState[key];
+    if (st.count > 0 && st.count > st.dismissedAt) {
+      bar.append(el('div', { class: 'notify-row' + (cfg.cls ? ' ' + cfg.cls : '') },
+        el('span', {}, cfg.icon + ' ' + cfg.label(st.count)),
+        el('div', { class: 'spacer' }),
+        el('button', { class: 'btn sm', onClick: () => { renderNotifyBar(); go(cfg.view); } }, 'View'),
+        el('button', { class: 'btn sm ghost', onClick: () => { st.dismissedAt = st.count; renderNotifyBar(); } }, '✕')));
+    }
+  });
+  bar.classList.toggle('hidden', !bar.children.length);
+}
+
+function updateBadge(id, count) {
+  const badge = $('#' + id);
+  if (!badge) return;
+  if (count > 0) { badge.textContent = String(count); badge.classList.remove('hidden'); }
+  else badge.classList.add('hidden');
+}
+
+async function pollNotifications() {
+  const role = API.user.role;
+  try {
+    if (NAV.find(n => n.id === 'online').roles.includes(role)) {
+      const pending = await API.get('/orders?status=pending&source=online');
+      updateBadge('onlineBadge', pending.length);
+      if (notifyState.online.count !== null && pending.length > notifyState.online.count) toast('🔔 New online order received!');
+      notifyState.online.count = pending.length;
+      if (pending.length === 0) notifyState.online.dismissedAt = 0;
     }
   } catch (e) { /* ignore transient poll failures */ }
+
+  const canKds = NAV.find(n => n.id === 'kds').roles.includes(role);
+  const canOrders = NAV.find(n => n.id === 'orders').roles.includes(role);
+  if (canKds || canOrders) {
+    try {
+      const active = await API.get('/orders/kds/active');
+      if (canKds) {
+        const newCount = active.filter(o => o.kitchen_status === 'new').length;
+        updateBadge('kdsBadge', newCount);
+        if (notifyState.kitchen.count !== null && newCount > notifyState.kitchen.count) toast('👨‍🍳 New order sent to the kitchen');
+        notifyState.kitchen.count = newCount;
+        if (newCount === 0) notifyState.kitchen.dismissedAt = 0;
+      }
+      if (canOrders) {
+        const readyCount = active.filter(o => o.kitchen_status === 'ready').length;
+        updateBadge('ordersBadge', readyCount);
+        if (notifyState.ready.count !== null && readyCount > notifyState.ready.count) toast('🍽️ Order ready to serve!');
+        notifyState.ready.count = readyCount;
+        if (readyCount === 0) notifyState.ready.dismissedAt = 0;
+      }
+    } catch (e) { /* ignore transient poll failures */ }
+  }
+  renderNotifyBar();
 }
 
 const VIEWS = {};
@@ -135,8 +172,8 @@ async function startApp() {
   try { const s = await API.get('/settings'); CUR = s.currency || '$'; applyLogo(s.logo || ''); applyBrandName(s.restaurant_name); } catch {}
   buildNav();
   go('dashboard');
-  pollOnlineOrders();
-  setInterval(pollOnlineOrders, 15000);
+  pollNotifications();
+  setInterval(pollNotifications, 15000);
 }
 
 // ================= DASHBOARD =================
@@ -290,8 +327,37 @@ async function viewOrder(id) {
     `<tr><td>${i.name}</td><td>${i.qty}</td><td>${money(i.qty * i.price)}</td></tr>`));
   c.append(t, el('p', { style: 'margin-top:10px' }, `Total: ${money(o.total)} · ${o.type} · `, statusBadge(o.status)));
   const acts = [{ label: 'Close', onClick: closeModal }];
+  if (o.paid) acts.push({ label: '🖨️ Print Receipt', onClick: () => printReceipt(o) });
   if (!o.paid && o.status !== 'cancelled') acts.push({ label: 'Pay', primary: true, onClick: () => { closeModal(); payOrder(id); } });
   modal('Order ' + o.code, c, acts);
+}
+
+async function printReceipt(o) {
+  let s = {};
+  try { s = await API.get('/settings'); } catch (e) {}
+  const lines = o.items.map(i => `<div class="rc-line"><span>${i.qty}× ${i.name}</span><span>${money(i.qty * i.price)}</span></div>`).join('');
+  $('#receiptArea').innerHTML = `
+    <div class="rc-head">
+      ${s.logo ? `<img class="rc-logo" src="${s.logo}" />` : ''}
+      <h2>${s.restaurant_name || 'Receipt'}</h2>
+      ${s.address ? `<div>${s.address}</div>` : ''}
+      ${s.phone ? `<div>${s.phone}</div>` : ''}
+    </div>
+    <hr/>
+    <div class="rc-meta"><span>Order ${o.code}</span><span>${fmtDate(o.created_at)}</span></div>
+    <div class="rc-meta"><span>${o.type}</span><span>${o.table_id ? 'Table ' + o.table_id : ''}</span></div>
+    <hr/>
+    ${lines}
+    <hr/>
+    <div class="rc-line"><span>Subtotal</span><span>${money(o.subtotal)}</span></div>
+    ${o.discount ? `<div class="rc-line"><span>Discount</span><span>-${money(o.discount)}</span></div>` : ''}
+    ${o.tip ? `<div class="rc-line"><span>Tip</span><span>${money(o.tip)}</span></div>` : ''}
+    <div class="rc-line rc-total"><span>Total</span><span>${money(o.total)}</span></div>
+    ${o.payment_method ? `<div class="rc-meta"><span>Payment</span><span>${o.payment_method.toUpperCase()}</span></div>` : ''}
+    <hr/>
+    <div class="rc-footer">${s.receipt_footer || 'Thank you!'}</div>
+  `;
+  setTimeout(() => window.print(), 50);
 }
 
 async function payOrder(id) {
@@ -310,7 +376,10 @@ async function payOrder(id) {
       const total = Math.max(0, o.subtotal - Number(disc.value)) + Number(tip.value);
       await API.post('/payments', { order_id: id, method: methodSel.value, amount: total,
         discount: Number(disc.value), tip: Number(tip.value), close: true });
-      closeModal(); toast('Payment complete'); go('orders');
+      toast('Payment complete'); go('orders');
+      const paid = await API.get('/orders/' + id);
+      modal('Payment Complete', el('p', {}, `Order ${paid.code} · ${money(paid.total)} paid.`),
+        [{ label: 'Close', onClick: closeModal }, { label: '🖨️ Print Receipt', primary: true, onClick: () => printReceipt(paid) }]);
     } }
   ]);
 }
