@@ -610,10 +610,16 @@ VIEWS.menu = async (v) => {
       toast('Updated ' + selected.size + ' item' + (selected.size > 1 ? 's' : ''));
       go('menu');
     };
+    const deleteSelected = () => confirmDialog(`Delete ${selected.size} selected item${selected.size > 1 ? 's' : ''}?`, async () => {
+      await Promise.all([...selected].map(id => API.del('/menu/items/' + id)));
+      toast('Deleted ' + selected.size + ' item' + (selected.size > 1 ? 's' : ''));
+      go('menu');
+    });
     bulkBar.append(
       el('span', { class: 'muted' }, `${selected.size} selected`),
       el('button', { class: 'btn sm', onClick: () => setVisibility(1) }, '🌐 Set Website Live'),
       el('button', { class: 'btn sm', onClick: () => setVisibility(0) }, '🏠 Set Only In Restaurant'),
+      el('button', { class: 'btn sm danger', onClick: deleteSelected }, '🗑️ Delete Selected'),
       el('button', { class: 'btn sm ghost', onClick: () => { selected.clear(); renderBulkBar(); $$('.menu-row-check').forEach(c => c.checked = false); $('#menuSelectAll').checked = false; } }, 'Clear'));
   }
 
