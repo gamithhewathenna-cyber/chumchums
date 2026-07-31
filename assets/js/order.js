@@ -62,8 +62,12 @@ function renderMenu() {
   const g = $('#orderMenuGrid'); g.innerHTML = '';
   const items = ITEMS.filter(m => ACTIVE_CAT === null || m.category_id === ACTIVE_CAT);
   if (!items.length) { g.append(el('p', { class: 'muted' }, 'No items in this category')); return; }
-  items.forEach(m => g.append(el('div', { class: 'menu-tile', onClick: () => addToCart(m) },
-    el('div', { class: 'nm' }, m.name), el('div', { class: 'pr' }, money(m.price)))));
+  items.forEach(m => {
+    const tile = el('div', { class: 'menu-tile', onClick: () => addToCart(m) });
+    if (m.image) tile.append(el('img', { class: 'tile-img', src: m.image, alt: '' }));
+    tile.append(el('div', { class: 'nm' }, m.name), el('div', { class: 'pr' }, money(m.price)));
+    g.append(tile);
+  });
 }
 
 function addToCart(m) {

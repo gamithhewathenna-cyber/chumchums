@@ -14,7 +14,7 @@ if ($sub === 'menu' && $method === 'GET') {
   foreach (all("SELECT skey,svalue FROM settings WHERE skey IN ('restaurant_name','logo','currency','online_ordering_enabled')") as $r) $s[$r['skey']] = $r['svalue'];
   if (($s['online_ordering_enabled'] ?? '') !== '1') json_out(['enabled' => false]);
   $cats = all("SELECT id,name,sort FROM categories WHERE active=1 ORDER BY sort,name");
-  $items = all("SELECT id,category_id,name,description,price,variations,addons FROM menu_items WHERE available=1 ORDER BY name");
+  $items = all("SELECT id,category_id,name,description,price,image,variations,addons FROM menu_items WHERE available=1 ORDER BY name");
   foreach ($items as &$i) {
     $i['variations'] = $i['variations'] ? json_decode($i['variations'], true) : null;
     $i['addons'] = $i['addons'] ? json_decode($i['addons'], true) : null;

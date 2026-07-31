@@ -47,9 +47,9 @@ if ($sub === 'items') {
 
   if ($method === 'POST' && !$id) {
     require_role(['admin','manager']);
-    $nid = insert("INSERT INTO menu_items (category_id,name,description,price,variations,addons,is_combo)
-      VALUES (?,?,?,?,?,?,?)", [
-      inp('category_id'), inp('name'), inp('description',''), inp('price',0),
+    $nid = insert("INSERT INTO menu_items (category_id,name,description,price,image,variations,addons,is_combo)
+      VALUES (?,?,?,?,?,?,?,?)", [
+      inp('category_id'), inp('name'), inp('description',''), inp('price',0), inp('image') ?: null,
       inp('variations') ? json_encode(inp('variations')) : null,
       inp('addons') ? json_encode(inp('addons')) : null, inp('is_combo') ? 1 : 0]);
     json_out(['id' => $nid]);
@@ -65,10 +65,10 @@ if ($sub === 'items') {
     require_role(['admin','manager']);
     $cur = one("SELECT * FROM menu_items WHERE id=?", [$id]);
     if (!$cur) json_out(['error'=>'Not found'],404);
-    q("UPDATE menu_items SET category_id=?,name=?,description=?,price=?,available=?,variations=?,addons=?,is_combo=? WHERE id=?", [
+    q("UPDATE menu_items SET category_id=?,name=?,description=?,price=?,image=?,available=?,variations=?,addons=?,is_combo=? WHERE id=?", [
       inp('category_id', $cur['category_id']), inp('name', $cur['name']),
       inp('description', $cur['description']), inp('price', $cur['price']),
-      inp('available', $cur['available']),
+      inp('image', $cur['image']), inp('available', $cur['available']),
       inp('variations') ? json_encode(inp('variations')) : $cur['variations'],
       inp('addons') ? json_encode(inp('addons')) : $cur['addons'],
       inp('is_combo', $cur['is_combo']), $id]);

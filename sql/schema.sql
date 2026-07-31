@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS menu_items (
   name VARCHAR(160) NOT NULL,
   description TEXT,
   price DECIMAL(10,2) NOT NULL DEFAULT 0,
-  image VARCHAR(255),
+  image MEDIUMTEXT,
   available TINYINT NOT NULL DEFAULT 1,
   variations TEXT,
   addons TEXT,

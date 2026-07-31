@@ -206,8 +206,9 @@ function renderMenu() {
   const g = $('#menuGrid'); g.innerHTML = '';
   cartMenu.filter(m => !cartCat || m.category_id == cartCat).forEach(m => {
     const tile = el('div', { class: 'menu-tile' + (m.available ? '' : ' out'),
-      onClick: () => m.available && addToCart(m) },
-      el('div', { class: 'nm' }, m.name), el('div', { class: 'pr' }, money(m.price)));
+      onClick: () => m.available && addToCart(m) });
+    if (m.image) tile.append(el('img', { class: 'tile-img', src: m.image, alt: '' }));
+    tile.append(el('div', { class: 'nm' }, m.name), el('div', { class: 'pr' }, money(m.price)));
     g.append(tile);
   });
 }
@@ -308,7 +309,8 @@ VIEWS.online = async (v) => {
     const [orders, tables] = await Promise.all([API.get('/orders?status=pending&source=online'), API.get('/tables')]);
     v.innerHTML = '';
     v.append(el('div', { class: 'toolbar' }, el('span', { class: 'section-title', style: 'margin:0' }, 'Online Orders'),
-      el('span', { class: 'muted' }, ' · auto-refresh 8s')));
+      el('span', { class: 'muted' }, ' · auto-refresh 8s'), el('div', { class: 'spacer' }),
+      el('button', { class: 'btn', onClick: () => window.open('/order.html', '_blank') }, '🔗 View Public Ordering Page')));
     if (!orders.length) { v.append(el('p', { class: 'muted' }, 'No pending online orders 🎉')); return; }
     const grid = el('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fill,minmax(300px,1fr))' });
     orders.forEach(o => {
@@ -512,11 +514,46 @@ function editItem(i, cats) {
   const desc = el('input', { placeholder: 'Description', value: i.description || '' });
   const price = el('input', { type: 'number', step: '0.01', placeholder: 'Price', value: i.price || '' });
   const catSel = el('select'); cats.forEach(c => catSel.append(el('option', { value: c.id, selected: c.id === i.category_id }, c.name)));
+
+  let image = i.image || '';
+  const IMG_W = 300, IMG_H = 200;
+  const preview = el('img', { class: 'preview', style: `width:${IMG_W}px;height:${IMG_H}px;object-fit:cover`, src: image });
+  const emptyState = el('div', { class: 'preview-empty', style: `width:${IMG_W}px;height:${IMG_H}px` }, '🍔');
+  preview.style.display = image ? '' : 'none';
+  emptyState.style.display = image ? 'none' : '';
+  const fileInput = el('input', { type: 'file', accept: 'image/*', style: 'width:auto' });
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = IMG_W; canvas.height = IMG_H;
+        const ctx = canvas.getContext('2d');
+        const scale = Math.max(IMG_W / img.width, IMG_H / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, (IMG_W - w) / 2, (IMG_H - h) / 2, w, h);
+        const out = canvas.toDataURL('image/jpeg', 0.82);
+        if (out.length > 150000) { toast('Photo too large — pick a simpler image'); return; }
+        image = out;
+        preview.src = image; preview.style.display = ''; emptyState.style.display = 'none';
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  const removeImgBtn = el('button', { class: 'btn sm', onClick: () => {
+    image = ''; preview.style.display = 'none'; emptyState.style.display = ''; fileInput.value = '';
+  } }, 'Remove');
+
   const c = el('div', {}, el('label', {}, 'Name'), name, el('label', {}, 'Description'), desc,
-    el('label', {}, 'Category'), catSel, el('label', {}, 'Price'), price);
+    el('label', {}, 'Category'), catSel, el('label', {}, 'Price'), price,
+    el('label', {}, 'Photo (300×200)'), el('div', { class: 'logo-upload' }, preview, emptyState, fileInput, removeImgBtn));
   const acts = [{ label: 'Cancel', onClick: closeModal },
     { label: 'Save', primary: true, onClick: async () => {
-      const body = { name: name.value, description: desc.value, price: +price.value, category_id: +catSel.value };
+      const body = { name: name.value, description: desc.value, price: +price.value, category_id: +catSel.value, image };
       if (i.id) await API.put('/menu/items/' + i.id, body); else await API.post('/menu/items', body);
       closeModal(); toast('Saved'); go('menu');
     } }];

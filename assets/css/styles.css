@@ -139,8 +139,10 @@ tr:hover td { background: var(--surface-2); }
 .cat-pill.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 .menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
 .menu-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-  padding: 12px; cursor: pointer; text-align: center; transition: .12s; }
+  padding: 12px; cursor: pointer; text-align: center; transition: .12s; overflow: hidden; }
 .menu-tile:hover { border-color: var(--primary); transform: translateY(-2px); }
+.menu-tile .tile-img { width: calc(100% + 24px); margin: -12px -12px 8px; display: block;
+  aspect-ratio: 3/2; object-fit: cover; }
 .menu-tile .nm { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .menu-tile .pr { color: var(--primary); font-weight: 700; }
 .menu-tile.out { opacity: .4; }
