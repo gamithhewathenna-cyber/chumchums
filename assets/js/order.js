@@ -12,7 +12,7 @@ async function apiPost(path, body) {
   return data;
 }
 
-let CATS = [], ITEMS = [], TABLES = [], CART = [], ACTIVE_CAT = null;
+let CATS = [], ITEMS = [], TABLES = [], CART = [], ACTIVE_CAT = null, ADDON_GROUPS = [];
 const params = new URLSearchParams(location.search);
 const PRESET_TABLE = params.get('table');
 
@@ -37,7 +37,7 @@ async function boot() {
     return;
   }
 
-  CATS = menu.categories; ITEMS = menu.items;
+  CATS = menu.categories; ITEMS = menu.items; ADDON_GROUPS = menu.addon_groups || [];
   try { TABLES = await apiGet('/public/tables'); } catch (e) { TABLES = []; }
 
   if (params.get('cancelled') === '1') toast('Payment cancelled — you can try again');
@@ -64,29 +64,67 @@ function renderMenu() {
   const items = ITEMS.filter(m => ACTIVE_CAT === null || m.category_id === ACTIVE_CAT);
   if (!items.length) { g.append(el('p', { class: 'muted' }, 'No items in this category')); return; }
   items.forEach(m => {
-    const tile = el('div', { class: 'menu-tile', onClick: () => addToCart(m) });
+    const tile = el('div', { class: 'menu-tile', onClick: () => m.addon_group_id ? openExtrasModal(m) : addToCart(m) });
     tile.append(m.image ? el('img', { class: 'tile-img', src: m.image, alt: '' }) : el('div', { class: 'tile-img tile-noimg' }, 'No Image'));
     tile.append(el('div', { class: 'nm' }, m.name), el('div', { class: 'pr' }, money(m.price)));
     g.append(tile);
   });
 }
 
-function addToCart(m) {
-  const line = CART.find(c => c.menu_item_id === m.id);
+function openExtrasModal(m) {
+  const group = ADDON_GROUPS.find(g => g.id === m.addon_group_id);
+  if (!group || !group.items.length) { addToCart(m); return; }
+  const selected = new Set();
+  const list = el('div');
+  const totalLine = el('div', { class: 'tot-row big', style: 'margin-top:10px' });
+  const updateTotal = () => {
+    const extra = group.items.filter(it => selected.has(it.id)).reduce((s, it) => s + it.price, 0);
+    totalLine.innerHTML = ''; totalLine.append(el('span', {}, 'Total'), el('span', {}, money(m.price + extra)));
+  };
+  group.items.forEach(it => {
+    const input = el('input', { type: group.selection_type === 'single' ? 'radio' : 'checkbox', name: 'extras', style: 'width:auto;margin:0' });
+    input.onchange = () => {
+      if (group.selection_type === 'single') { selected.clear(); if (input.checked) selected.add(it.id); }
+      else { input.checked ? selected.add(it.id) : selected.delete(it.id); }
+      updateTotal();
+    };
+    list.append(el('label', { class: 'row', style: 'gap:8px;font-weight:400' }, input, `${it.name} (+${money(it.price)})`));
+  });
+  updateTotal();
+  const c = el('div', {}, el('p', { class: 'muted', style: 'margin-top:0' },
+    group.selection_type === 'single' ? 'Choose one:' : 'Choose any:'), list, totalLine);
+  modal('Add Extras — ' + m.name, c, [
+    { label: 'Cancel', onClick: closeModal },
+    { label: 'Add to Cart', primary: true, onClick: () => {
+      const chosen = group.items.filter(it => selected.has(it.id));
+      const extraTotal = chosen.reduce((s, it) => s + it.price, 0);
+      addToCart(m, chosen.map(it => ({ id: it.id, name: it.name, price: it.price })), extraTotal);
+      closeModal();
+    } }
+  ]);
+}
+
+function addToCart(m, modifiers = null, extraPrice = 0) {
+  const modKey = modifiers ? JSON.stringify(modifiers.map(x => x.id)) : '';
+  const line = CART.find(c => c.menu_item_id === m.id && (c._modKey || '') === modKey);
   if (line) line.qty++;
-  else CART.push({ menu_item_id: m.id, name: m.name, price: m.price, qty: 1 });
+  else CART.push({ menu_item_id: m.id, name: m.name, price: m.price + extraPrice, qty: 1, modifiers: modifiers || undefined, _modKey: modKey });
   renderCart();
 }
 
 function renderCart() {
   const box = $('#orderCartItems'); box.innerHTML = '';
   if (!CART.length) box.append(el('p', { class: 'muted' }, 'Tap a menu item to add it'));
-  CART.forEach((c, i) => box.append(el('div', { class: 'cart-line' },
-    el('div', {}, el('div', {}, c.name), el('small', { class: 'muted' }, money(c.price))),
-    el('div', { class: 'qty' },
-      el('button', { onClick: () => { c.qty--; if (c.qty <= 0) CART.splice(i, 1); renderCart(); } }, '−'),
-      el('span', {}, String(c.qty)),
-      el('button', { onClick: () => { c.qty++; renderCart(); } }, '+')))));
+  CART.forEach((c, i) => {
+    const info = el('div', {}, el('div', {}, c.name));
+    if (c.modifiers && c.modifiers.length) info.append(el('small', { class: 'muted', style: 'display:block' }, '+ ' + c.modifiers.map(mo => mo.name).join(', +')));
+    info.append(el('small', { class: 'muted' }, money(c.price)));
+    box.append(el('div', { class: 'cart-line' }, info,
+      el('div', { class: 'qty' },
+        el('button', { onClick: () => { c.qty--; if (c.qty <= 0) CART.splice(i, 1); renderCart(); } }, '−'),
+        el('span', {}, String(c.qty)),
+        el('button', { onClick: () => { c.qty++; renderCart(); } }, '+'))));
+  });
   const total = CART.reduce((s, c) => s + c.qty * c.price, 0);
   const foot = $('#orderCartFoot'); foot.innerHTML = '';
   foot.append(el('div', { class: 'tot-row big' }, el('span', {}, 'Total'), el('span', {}, money(total))));
@@ -103,7 +141,11 @@ function openDetails() {
   if (PRESET_TABLE) tsel.disabled = true; else tsel.disabled = false;
 
   const summary = $('#orderSummary'); summary.innerHTML = '';
-  CART.forEach(c => summary.append(el('div', { class: 'tot-row' }, el('span', {}, `${c.qty}× ${c.name}`), el('span', {}, money(c.qty * c.price)))));
+  CART.forEach(c => {
+    summary.append(el('div', { class: 'tot-row' }, el('span', {}, `${c.qty}× ${c.name}`), el('span', {}, money(c.qty * c.price))));
+    if (c.modifiers && c.modifiers.length)
+      summary.append(el('div', { class: 'tot-row' }, el('small', { class: 'muted' }, '  + ' + c.modifiers.map(mo => mo.name).join(', +')), el('span', {})));
+  });
   const total = CART.reduce((s, c) => s + c.qty * c.price, 0);
   summary.append(el('div', { class: 'tot-row big' }, el('span', {}, 'Total'), el('span', {}, money(total))));
 
@@ -128,7 +170,7 @@ $('#payBtn').onclick = async () => {
   try {
     const res = await apiPost('/public/checkout', {
       table_id: tableId, customer_name: name, customer_email: email, customer_phone: phone, notes,
-      items: CART.map(c => ({ menu_item_id: c.menu_item_id, qty: c.qty })),
+      items: CART.map(c => ({ menu_item_id: c.menu_item_id, qty: c.qty, addon_item_ids: (c.modifiers || []).map(mo => mo.id) })),
     });
     location.href = res.checkout_url;
   } catch (e) {

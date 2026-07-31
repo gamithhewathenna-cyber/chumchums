@@ -25,6 +25,7 @@ $GLOBALS['METHOD'] = $method;
 $routes = [
   'auth'      => 'auth.php',
   'menu'      => 'menu.php',
+  'addons'    => 'addons.php',
   'tables'    => 'tables.php',
   'orders'    => 'orders.php',
   'payments'  => 'payments.php',

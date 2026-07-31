@@ -217,10 +217,11 @@ VIEWS.dashboard = async (v) => {
 };
 
 // ================= POS / NEW ORDER =================
-let cart = [], cartCat = null, cartMenu = [], cartType = 'dine-in', cartTable = null, cartCustomer = null;
+let cart = [], cartCat = null, cartMenu = [], cartType = 'dine-in', cartTable = null, cartCustomer = null, cartAddonGroups = [];
 VIEWS.pos = async (v) => {
   const cats = await API.get('/menu/categories');
   cartMenu = await API.get('/menu/items');
+  cartAddonGroups = await API.get('/addons/groups');
   cart = []; cartCat = null;
   v.innerHTML = '';
   const wrap = el('div', { class: 'pos' });
@@ -257,23 +258,58 @@ function renderMenu() {
   const g = $('#menuGrid'); g.innerHTML = '';
   cartMenu.filter(m => !cartCat || m.category_id == cartCat).forEach(m => {
     const tile = el('div', { class: 'menu-tile' + (m.available ? '' : ' out'),
-      onClick: () => m.available && addToCart(m) });
+      onClick: () => m.available && (m.addon_group_id ? openExtrasModal(m) : addToCart(m)) });
     tile.append(m.image ? el('img', { class: 'tile-img', src: m.image, alt: '' }) : el('div', { class: 'tile-img tile-noimg' }, 'No Image'));
     tile.append(el('div', { class: 'nm' }, m.name), el('div', { class: 'pr' }, money(m.price)));
     g.append(tile);
   });
 }
-function addToCart(m) {
-  const line = cart.find(c => c.menu_item_id === m.id && !c.notes);
+function openExtrasModal(m) {
+  const group = cartAddonGroups.find(g => g.id === m.addon_group_id);
+  if (!group || !group.items.length) { addToCart(m); return; }
+  const selected = new Set();
+  const list = el('div');
+  const totalLine = el('div', { class: 'tot-row big', style: 'margin-top:10px' });
+  const updateTotal = () => {
+    const extra = group.items.filter(it => selected.has(it.id)).reduce((s, it) => s + it.price, 0);
+    totalLine.innerHTML = ''; totalLine.append(el('span', {}, 'Total'), el('span', {}, money(m.price + extra)));
+  };
+  group.items.forEach(it => {
+    const input = el('input', { type: group.selection_type === 'single' ? 'radio' : 'checkbox', name: 'extras', style: 'width:auto;margin:0' });
+    input.onchange = () => {
+      if (group.selection_type === 'single') { selected.clear(); if (input.checked) selected.add(it.id); }
+      else { input.checked ? selected.add(it.id) : selected.delete(it.id); }
+      updateTotal();
+    };
+    list.append(el('label', { class: 'row', style: 'gap:8px;font-weight:400' }, input, `${it.name} (+${money(it.price)})`));
+  });
+  updateTotal();
+  const c = el('div', {}, el('p', { class: 'muted', style: 'margin-top:0' },
+    group.selection_type === 'single' ? 'Choose one:' : 'Choose any:'), list, totalLine);
+  modal('Add Extras — ' + m.name, c, [
+    { label: 'Cancel', onClick: closeModal },
+    { label: 'Add to Cart', primary: true, onClick: () => {
+      const chosen = group.items.filter(it => selected.has(it.id)).map(it => ({ name: it.name, price: it.price }));
+      const extraTotal = chosen.reduce((s, it) => s + it.price, 0);
+      addToCart(m, chosen.length ? chosen : null, extraTotal);
+      closeModal();
+    } }
+  ]);
+}
+function addToCart(m, modifiers = null, extraPrice = 0) {
+  const modKey = modifiers ? JSON.stringify(modifiers) : '';
+  const line = cart.find(c => c.menu_item_id === m.id && (c._modKey || '') === modKey);
   if (line) line.qty++;
-  else cart.push({ menu_item_id: m.id, name: m.name, price: m.price, qty: 1 });
+  else cart.push({ menu_item_id: m.id, name: m.name, price: m.price + extraPrice, qty: 1, modifiers: modifiers || undefined, _modKey: modKey });
   renderCart();
 }
 function renderCart() {
   const box = $('#cartItems'); box.innerHTML = '';
   cart.forEach((c, i) => {
-    box.append(el('div', { class: 'cart-line' },
-      el('div', {}, el('div', {}, c.name), el('small', { class: 'muted' }, money(c.price))),
+    const info = el('div', {}, el('div', {}, c.name));
+    if (c.modifiers && c.modifiers.length) info.append(el('small', { class: 'muted', style: 'display:block' }, '+ ' + c.modifiers.map(mo => mo.name).join(', +')));
+    info.append(el('small', { class: 'muted' }, money(c.price)));
+    box.append(el('div', { class: 'cart-line' }, info,
       el('div', { class: 'qty' },
         el('button', { onClick: () => { c.qty--; if (c.qty <= 0) cart.splice(i, 1); renderCart(); } }, '−'),
         el('span', {}, String(c.qty)),
@@ -332,7 +368,7 @@ async function viewOrder(id) {
   const c = el('div');
   const t = el('table'); t.innerHTML = '<tr><th>Item</th><th>Qty</th><th>Price</th></tr>';
   o.items.forEach(i => t.insertAdjacentHTML('beforeend',
-    `<tr><td>${i.name}</td><td>${i.qty}</td><td>${money(i.qty * i.price)}</td></tr>`));
+    `<tr><td>${i.name}${i.modifiers && i.modifiers.length ? `<br><small class="muted">+ ${i.modifiers.map(mo => mo.name).join(', +')}</small>` : ''}</td><td>${i.qty}</td><td>${money(i.qty * i.price)}</td></tr>`));
   c.append(t, el('p', { style: 'margin-top:10px', html: `Total: ${money(o.total)} · ${o.type} · ${statusBadge(o.status)}` }));
   const acts = [{ label: 'Close', onClick: closeModal }];
   if (o.paid) acts.push({ label: '🖨️ Print Receipt', onClick: () => printReceipt(o) });
@@ -345,7 +381,11 @@ async function viewOrder(id) {
 async function printReceipt(o) {
   let s = {};
   try { s = await API.get('/settings'); } catch (e) {}
-  const lines = o.items.map(i => `<div class="rc-line"><span>${i.qty}× ${i.name}</span><span>${money(i.qty * i.price)}</span></div>`).join('');
+  const lines = o.items.map(i => {
+    const mods = i.modifiers && i.modifiers.length
+      ? `<div class="rc-line" style="font-size:11px;padding-left:10px"><span>+ ${i.modifiers.map(mo => mo.name).join(', +')}</span><span></span></div>` : '';
+    return `<div class="rc-line"><span>${i.qty}× ${i.name}</span><span>${money(i.qty * i.price)}</span></div>${mods}`;
+  }).join('');
   const billLogo = s.receipt_logo || s.logo;
   $('#receiptArea').innerHTML = `
     <div class="rc-head">
@@ -421,7 +461,7 @@ VIEWS.online = async (v) => {
       card.append(el('p', {}, o.customer_name || '—', el('br', {}),
         el('small', { class: 'muted' }, [o.customer_email, o.customer_phone].filter(Boolean).join(' · '))));
       const ul = el('ul', { style: 'margin:8px 0;padding-left:18px' });
-      o.items.forEach(i => ul.append(el('li', {}, `${i.qty}× ${i.name}`)));
+      o.items.forEach(i => ul.append(el('li', { html: `${i.qty}× ${i.name}` + (i.modifiers && i.modifiers.length ? ` <small class="muted">(+ ${i.modifiers.map(mo => mo.name).join(', +')})</small>` : '') })));
       card.append(ul);
       if (o.notes) card.append(el('p', { class: 'muted' }, '📝 ' + o.notes));
       card.append(el('div', { class: 'tot-row big' }, el('span', {}, 'Total'), el('span', {}, money(o.total))));
@@ -547,7 +587,7 @@ VIEWS.kds = async (v) => {
       tk.append(el('div', { class: 'ticket-head' },
         el('strong', {}, o.code + ' · ' + o.type), el('span', { class: 'muted' }, mins + 'm')));
       const ul = el('ul', { class: 'ticket-body' });
-      o.items.forEach(i => ul.append(el('li', {}, `${i.qty}× ${i.name}`)));
+      o.items.forEach(i => ul.append(el('li', { html: `${i.qty}× ${i.name}` + (i.modifiers && i.modifiers.length ? ` <small class="muted">(+ ${i.modifiers.map(mo => mo.name).join(', +')})</small>` : '') })));
       if (o.notes) ul.append(el('li', { class: 'muted' }, '📝 ' + o.notes));
       tk.append(ul);
       const foot = el('div', { class: 'ticket-foot' });
@@ -564,7 +604,10 @@ VIEWS.kds = async (v) => {
 };
 function showKdsSummary(orders) {
   const counts = {};
-  orders.forEach(o => o.items.forEach(i => { counts[i.name] = (counts[i.name] || 0) + i.qty; }));
+  orders.forEach(o => o.items.forEach(i => {
+    const key = i.name + (i.modifiers && i.modifiers.length ? ' (+ ' + i.modifiers.map(mo => mo.name).join(', +') + ')' : '');
+    counts[key] = (counts[key] || 0) + i.qty;
+  }));
   const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   const c = el('div');
   if (!rows.length) c.append(el('p', { class: 'muted' }, 'No active items to prepare'));
@@ -578,14 +621,15 @@ function showKdsSummary(orders) {
 
 // ================= MENU MANAGEMENT =================
 VIEWS.menu = async (v) => {
-  const [cats, items] = await Promise.all([API.get('/menu/categories'), API.get('/menu/items')]);
+  const [cats, items, groups] = await Promise.all([API.get('/menu/categories'), API.get('/menu/items'), API.get('/addons/groups')]);
   v.innerHTML = '';
   const toolbar = el('div', { class: 'toolbar' },
     el('span', { class: 'section-title', style: 'margin:0' }, 'Menu'), el('div', { class: 'spacer' }),
     el('button', { class: 'btn', onClick: manageCategories }, '🗂️ Manage Categories'),
+    el('button', { class: 'btn', onClick: manageAddonGroups }, '🧩 Add-on Groups'),
     el('button', { class: 'btn', onClick: () => editCategory() }, '+ Category'),
     el('button', { class: 'btn', onClick: () => bulkAddItems(cats) }, '📋 Bulk Add Items'),
-    el('button', { class: 'btn primary', onClick: () => editItem(null, cats) }, '+ Item'));
+    el('button', { class: 'btn primary', onClick: () => editItem(null, cats, groups) }, '+ Item'));
   v.append(toolbar);
 
   let activeCat = 'all';
@@ -652,7 +696,7 @@ VIEWS.menu = async (v) => {
         i.available ? 'On' : 'Off'); avail.append(toggle); tr.append(avail);
       tr.append(el('td', { html: i.show_online ? statusBadge('available').replace('available', '🌐 Live') : statusBadge('cancelled').replace('cancelled', '🏠 In-Store') }));
       tr.append(el('td', { class: 'row' },
-        el('button', { class: 'btn sm', onClick: () => editItem(i, cats) }, 'Edit'),
+        el('button', { class: 'btn sm', onClick: () => editItem(i, cats, groups) }, 'Edit'),
         el('button', { class: 'btn sm danger', onClick: () => confirmDialog(`Delete "${i.name}"?`, async () => {
           await API.del('/menu/items/' + i.id); toast('Deleted'); go('menu');
         }) }, 'Delete')));
@@ -723,6 +767,92 @@ async function manageCategories() {
     { label: '+ New Category', primary: true, onClick: () => { closeModal(); editCategory(); } },
   ]);
 }
+
+// ---- Add-on Groups (extras like "Kottu Extras") ----
+async function manageAddonGroups() {
+  const groups = await API.get('/addons/groups');
+  const c = el('div');
+  if (!groups.length) c.append(el('p', { class: 'muted' }, 'No add-on groups yet — create one, e.g. "Kottu Extras"'));
+  else {
+    const t = el('table'); t.innerHTML = '<tr><th>Group</th><th>Selection</th><th>Extras</th><th></th></tr>';
+    groups.forEach(g => {
+      const tr = el('tr');
+      tr.append(el('td', {}, g.name));
+      tr.append(el('td', {}, g.selection_type === 'single' ? 'Choose one' : 'Choose multiple'));
+      tr.append(el('td', {}, `${g.items.length} extra${g.items.length === 1 ? '' : 's'}`));
+      tr.append(el('td', { class: 'row' },
+        el('button', { class: 'btn sm', onClick: () => { closeModal(); editAddonGroup(g); } }, 'Edit'),
+        el('button', { class: 'btn sm', onClick: () => { closeModal(); manageAddonExtras(g); } }, 'Extras'),
+        el('button', { class: 'btn sm danger', onClick: () => confirmDialog(`Delete group "${g.name}"? Items using it will lose their extras.`, async () => {
+          await API.del('/addons/groups/' + g.id); toast('Deleted'); manageAddonGroups();
+        }) }, 'Delete')));
+      t.append(tr);
+    });
+    c.append(t);
+  }
+  modal('Add-on Groups', c, [
+    { label: 'Close', onClick: closeModal },
+    { label: '+ New Group', primary: true, onClick: () => { closeModal(); editAddonGroup(); } },
+  ]);
+}
+function editAddonGroup(g = {}) {
+  const name = el('input', { placeholder: 'Group name, e.g. Kottu Extras', value: g.name || '' });
+  const typeSel = el('select');
+  [['multiple','Customers can choose multiple'], ['single','Customers choose only one']].forEach(([val, lbl]) =>
+    typeSel.append(el('option', { value: val, selected: (g.selection_type || 'multiple') === val }, lbl)));
+  const c = el('div', {}, el('label', {}, 'Group Name'), name, el('label', {}, 'Selection Type'), typeSel);
+  const acts = [{ label: 'Cancel', onClick: () => { closeModal(); manageAddonGroups(); } },
+    { label: 'Save', primary: true, onClick: async () => {
+      if (g.id) await API.put('/addons/groups/' + g.id, { name: name.value, selection_type: typeSel.value });
+      else await API.post('/addons/groups', { name: name.value, selection_type: typeSel.value });
+      closeModal(); toast('Saved'); manageAddonGroups();
+    } }];
+  if (g.id) acts.splice(1, 0, { label: 'Delete', danger: true, onClick: () => confirmDialog(`Delete group "${g.name}"? Items using it will lose their extras.`, async () => {
+    await API.del('/addons/groups/' + g.id); closeModal(); toast('Deleted'); manageAddonGroups();
+  }) });
+  modal(g.id ? 'Edit Add-on Group' : 'New Add-on Group', c, acts);
+}
+async function manageAddonExtras(group) {
+  const groups = await API.get('/addons/groups');
+  const g = groups.find(x => x.id === group.id) || group;
+  const c = el('div');
+  c.append(el('p', { class: 'muted', style: 'margin-top:0' },
+    g.selection_type === 'single' ? 'Customers choose ONE of these on the order page' : 'Customers can choose MULTIPLE of these on the order page'));
+  if (!g.items.length) c.append(el('p', { class: 'muted' }, 'No extras yet'));
+  else {
+    const t = el('table'); t.innerHTML = '<tr><th>Extra</th><th>Price</th><th></th></tr>';
+    g.items.forEach(it => {
+      const tr = el('tr');
+      tr.append(el('td', {}, it.name), el('td', {}, money(it.price)));
+      tr.append(el('td', { class: 'row' },
+        el('button', { class: 'btn sm', onClick: () => { closeModal(); editAddonExtra(g, it); } }, 'Edit'),
+        el('button', { class: 'btn sm danger', onClick: () => confirmDialog(`Delete "${it.name}"?`, async () => {
+          await API.del('/addons/items/' + it.id); toast('Deleted'); manageAddonExtras(g);
+        }) }, 'Delete')));
+      t.append(tr);
+    });
+    c.append(t);
+  }
+  modal('Extras — ' + g.name, c, [
+    { label: '← Back', onClick: () => { closeModal(); manageAddonGroups(); } },
+    { label: '+ Add Extra', primary: true, onClick: () => { closeModal(); editAddonExtra(g); } },
+  ]);
+}
+function editAddonExtra(group, item = {}) {
+  const name = el('input', { placeholder: 'Extra name, e.g. Extra Cheese', value: item.name || '' });
+  const price = el('input', { type: 'number', step: '0.01', placeholder: 'Price', value: item.price || '' });
+  const c = el('div', {}, el('label', {}, 'Name'), name, el('label', {}, 'Price'), price);
+  const acts = [{ label: 'Cancel', onClick: () => { closeModal(); manageAddonExtras(group); } },
+    { label: 'Save', primary: true, onClick: async () => {
+      if (item.id) await API.put('/addons/items/' + item.id, { name: name.value, price: +price.value });
+      else await API.post('/addons/groups/' + group.id + '/items', { name: name.value, price: +price.value });
+      closeModal(); toast('Saved'); manageAddonExtras(group);
+    } }];
+  if (item.id) acts.splice(1, 0, { label: 'Delete', danger: true, onClick: () => confirmDialog(`Delete "${item.name}"?`, async () => {
+    await API.del('/addons/items/' + item.id); closeModal(); toast('Deleted'); manageAddonExtras(group);
+  }) });
+  modal(item.id ? 'Edit Extra' : 'New Extra', c, acts);
+}
 function bulkAddItems(cats) {
   if (!cats.length) { toast('Create a category first'); return; }
   const catSel = el('select'); cats.forEach(c => catSel.append(el('option', { value: c.id }, c.name)));
@@ -759,7 +889,7 @@ function bulkAddItems(cats) {
     } }
   ]);
 }
-function editItem(i, cats) {
+function editItem(i, cats, groups = []) {
   i = i || {};
   const name = el('input', { placeholder: 'Item name', value: i.name || '' });
   const desc = el('input', { placeholder: 'Description', value: i.description || '' });
@@ -803,13 +933,19 @@ function editItem(i, cats) {
   [[1,'🌐 Website Live — shown on online ordering'], [0,'🏠 Only In Restaurant — hidden from website']].forEach(([val, lbl]) =>
     visSel.append(el('option', { value: val, selected: (i.show_online ?? 1) == val }, lbl)));
 
+  const groupSel = el('select');
+  groupSel.append(el('option', { value: '' }, 'No extras'));
+  groups.forEach(g => groupSel.append(el('option', { value: g.id, selected: g.id === i.addon_group_id }, g.name)));
+
   const c = el('div', {}, el('label', {}, 'Name'), name, el('label', {}, 'Description'), desc,
     el('label', {}, 'Category'), catSel, el('label', {}, 'Price'), price,
     el('label', {}, 'Photo (300×200)'), el('div', { class: 'logo-upload' }, preview, emptyState, fileInput, removeImgBtn),
-    el('label', {}, 'Availability'), visSel);
+    el('label', {}, 'Availability'), visSel,
+    el('label', {}, 'Extras / Add-ons Group'), groupSel);
   const acts = [{ label: 'Cancel', onClick: closeModal },
     { label: 'Save', primary: true, onClick: async () => {
-      const body = { name: name.value, description: desc.value, price: +price.value, category_id: +catSel.value, image, show_online: +visSel.value };
+      const body = { name: name.value, description: desc.value, price: +price.value, category_id: +catSel.value, image,
+        show_online: +visSel.value, addon_group_id: groupSel.value || null };
       if (i.id) await API.put('/menu/items/' + i.id, body); else await API.post('/menu/items', body);
       closeModal(); toast('Saved'); go('menu');
     } }];

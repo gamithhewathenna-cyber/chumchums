@@ -14,16 +14,19 @@ if ($sub === 'menu' && $method === 'GET') {
   foreach (all("SELECT skey,svalue FROM settings WHERE skey IN ('restaurant_name','logo','currency','online_ordering_enabled','stripe_mode')") as $r) $s[$r['skey']] = $r['svalue'];
   if (($s['online_ordering_enabled'] ?? '') !== '1') json_out(['enabled' => false]);
   $cats = all("SELECT id,name,sort FROM categories WHERE active=1 ORDER BY sort,name");
-  $items = all("SELECT id,category_id,name,description,price,image,variations,addons FROM menu_items WHERE available=1 AND show_online=1 ORDER BY name");
+  $items = all("SELECT id,category_id,name,description,price,image,addon_group_id,variations,addons FROM menu_items WHERE available=1 AND show_online=1 ORDER BY name");
   foreach ($items as &$i) {
     $i['variations'] = $i['variations'] ? json_decode($i['variations'], true) : null;
     $i['addons'] = $i['addons'] ? json_decode($i['addons'], true) : null;
   }
   unset($i);
+  $groups = all("SELECT id,name,selection_type FROM addon_groups WHERE active=1");
+  foreach ($groups as &$g) $g['items'] = all("SELECT id,name,price FROM addon_items WHERE group_id=? ORDER BY sort,id", [$g['id']]);
+  unset($g);
   json_out(['enabled' => true, 'restaurant_name' => $s['restaurant_name'] ?? 'Restaurant',
     'logo' => $s['logo'] ?? '', 'currency' => $s['currency'] ?? '$',
     'test_mode' => ($s['stripe_mode'] ?? 'test') !== 'live',
-    'categories' => $cats, 'items' => $items]);
+    'categories' => $cats, 'items' => $items, 'addon_groups' => $groups]);
 }
 
 // ---- GET /public/tables ----
@@ -58,7 +61,15 @@ if ($sub === 'checkout' && $method === 'POST') {
     $qty = max(1, min(20, (int)($ci['qty'] ?? 1)));
     $mi = one("SELECT * FROM menu_items WHERE id=? AND available=1 AND show_online=1", [$mid]);
     if (!$mi) continue;
-    $verified[] = ['menu_item_id' => $mi['id'], 'name' => $mi['name'], 'price' => (float)$mi['price'], 'qty' => $qty];
+    $modifiers = []; $extraTotal = 0;
+    if ($mi['addon_group_id']) {
+      foreach (($ci['addon_item_ids'] ?? []) as $aid) {
+        $ai = one("SELECT * FROM addon_items WHERE id=? AND group_id=?", [(int)$aid, $mi['addon_group_id']]);
+        if ($ai) { $modifiers[] = ['name' => $ai['name'], 'price' => (float)$ai['price']]; $extraTotal += (float)$ai['price']; }
+      }
+    }
+    $verified[] = ['menu_item_id' => $mi['id'], 'name' => $mi['name'], 'price' => (float)$mi['price'] + $extraTotal,
+      'qty' => $qty, 'modifiers' => $modifiers];
   }
   if (!$verified) json_out(['error' => 'None of the selected items are available'], 400);
 
@@ -69,8 +80,8 @@ if ($sub === 'checkout' && $method === 'POST') {
     VALUES (?,?,?,?,?,?,?,?,0,'online',?,?,?)",
     [$code, 'dine-in', $tableId, 'awaiting_payment', 'pending', $notes, $subtotal, $subtotal, $name, $email, $phone ?: null]);
   foreach ($verified as $v) {
-    insert("INSERT INTO order_items (order_id,menu_item_id,name,qty,price) VALUES (?,?,?,?,?)",
-      [$oid, $v['menu_item_id'], $v['name'], $v['qty'], $v['price']]);
+    insert("INSERT INTO order_items (order_id,menu_item_id,name,qty,price,modifiers) VALUES (?,?,?,?,?,?)",
+      [$oid, $v['menu_item_id'], $v['name'], $v['qty'], $v['price'], $v['modifiers'] ? json_encode($v['modifiers']) : null]);
   }
 
   $raw = [];

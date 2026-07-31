@@ -15,7 +15,10 @@ function recalc($oid) {
 }
 function with_items($o) {
   if (!$o) return $o;
-  $o['items'] = all("SELECT * FROM order_items WHERE order_id=?", [$o['id']]);
+  $items = all("SELECT * FROM order_items WHERE order_id=?", [$o['id']]);
+  foreach ($items as &$it) $it['modifiers'] = $it['modifiers'] ? json_decode($it['modifiers'], true) : [];
+  unset($it);
+  $o['items'] = $items;
   return $o;
 }
 
