@@ -586,29 +586,61 @@ VIEWS.menu = async (v) => {
   v.append(toolbar);
 
   let activeCat = 'all';
+  const selected = new Set();
   const catRow = el('div', { class: 'cats' });
   const pill = (id, label) => el('div', { class: 'cat-pill' + (id === activeCat ? ' active' : ''), onClick: (e) => {
-    activeCat = id; $$('.cats .cat-pill').forEach(p => p.classList.remove('active')); e.target.classList.add('active'); renderTable();
+    activeCat = id; selected.clear(); $$('.cats .cat-pill').forEach(p => p.classList.remove('active')); e.target.classList.add('active'); renderTable();
   } }, label);
   catRow.append(pill('all', 'All'));
   cats.forEach(c => catRow.append(pill(c.id, c.name)));
   v.append(catRow);
 
+  const bulkBar = el('div', { class: 'toolbar hidden' });
+  v.append(bulkBar);
   const card = el('div', { class: 'card' });
   v.append(card);
+
+  function renderBulkBar() {
+    bulkBar.innerHTML = '';
+    bulkBar.classList.toggle('hidden', selected.size === 0);
+    if (!selected.size) return;
+    const setVisibility = async (showOnline) => {
+      await Promise.all([...selected].map(id => API.patch(`/menu/items/${id}/visibility`, { show_online: showOnline })));
+      toast('Updated ' + selected.size + ' item' + (selected.size > 1 ? 's' : ''));
+      go('menu');
+    };
+    bulkBar.append(
+      el('span', { class: 'muted' }, `${selected.size} selected`),
+      el('button', { class: 'btn sm', onClick: () => setVisibility(1) }, '🌐 Set Website Live'),
+      el('button', { class: 'btn sm', onClick: () => setVisibility(0) }, '🏠 Set Only In Restaurant'),
+      el('button', { class: 'btn sm ghost', onClick: () => { selected.clear(); renderBulkBar(); $$('.menu-row-check').forEach(c => c.checked = false); $('#menuSelectAll').checked = false; } }, 'Clear'));
+  }
+
   function renderTable() {
-    card.innerHTML = '';
+    card.innerHTML = ''; renderBulkBar();
     const filtered = activeCat === 'all' ? items : items.filter(i => i.category_id === activeCat);
     if (!filtered.length) { card.append(el('p', { class: 'muted' }, 'No items in this category')); return; }
     const t = el('table');
-    t.innerHTML = '<tr><th>Item</th><th>Category</th><th>Price</th><th>Available</th><th></th></tr>';
+    const selectAll = el('input', { type: 'checkbox', id: 'menuSelectAll', style: 'width:auto;margin:0' });
+    selectAll.onchange = () => {
+      filtered.forEach(i => selectAll.checked ? selected.add(i.id) : selected.delete(i.id));
+      $$('.menu-row-check').forEach(c => c.checked = selectAll.checked);
+      renderBulkBar();
+    };
+    t.append(el('tr', {}, el('th', {}, selectAll), el('th', {}, 'Item'), el('th', {}, 'Category'),
+      el('th', {}, 'Price'), el('th', {}, 'Available'), el('th', {}, 'Visibility'), el('th', {})));
     filtered.forEach(i => {
       const cat = cats.find(c => c.id === i.category_id)?.name || '—';
       const tr = el('tr');
-      tr.innerHTML = `<td>${i.name}</td><td>${cat}</td><td>${money(i.price)}</td>`;
+      const check = el('input', { type: 'checkbox', class: 'menu-row-check', style: 'width:auto;margin:0' });
+      check.checked = selected.has(i.id);
+      check.onchange = () => { check.checked ? selected.add(i.id) : selected.delete(i.id); renderBulkBar(); };
+      tr.append(el('td', {}, check));
+      tr.append(el('td', {}, i.name), el('td', {}, cat), el('td', {}, money(i.price)));
       const avail = el('td'); const toggle = el('button', { class: 'btn sm ' + (i.available ? 'primary' : ''),
         onClick: async () => { await API.patch(`/menu/items/${i.id}/availability`, { available: i.available ? 0 : 1 }); go('menu'); } },
         i.available ? 'On' : 'Off'); avail.append(toggle); tr.append(avail);
+      tr.append(el('td', { html: i.show_online ? statusBadge('available').replace('available', '🌐 Live') : statusBadge('cancelled').replace('cancelled', '🏠 In-Store') }));
       tr.append(el('td', {}, el('button', { class: 'btn sm', onClick: () => editItem(i, cats) }, 'Edit')));
       t.append(tr);
     });
@@ -666,12 +698,17 @@ function editItem(i, cats) {
     image = ''; preview.style.display = 'none'; emptyState.style.display = ''; fileInput.value = '';
   } }, 'Remove');
 
+  const visSel = el('select');
+  [[1,'🌐 Website Live — shown on online ordering'], [0,'🏠 Only In Restaurant — hidden from website']].forEach(([val, lbl]) =>
+    visSel.append(el('option', { value: val, selected: (i.show_online ?? 1) == val }, lbl)));
+
   const c = el('div', {}, el('label', {}, 'Name'), name, el('label', {}, 'Description'), desc,
     el('label', {}, 'Category'), catSel, el('label', {}, 'Price'), price,
-    el('label', {}, 'Photo (300×200)'), el('div', { class: 'logo-upload' }, preview, emptyState, fileInput, removeImgBtn));
+    el('label', {}, 'Photo (300×200)'), el('div', { class: 'logo-upload' }, preview, emptyState, fileInput, removeImgBtn),
+    el('label', {}, 'Availability'), visSel);
   const acts = [{ label: 'Cancel', onClick: closeModal },
     { label: 'Save', primary: true, onClick: async () => {
-      const body = { name: name.value, description: desc.value, price: +price.value, category_id: +catSel.value, image };
+      const body = { name: name.value, description: desc.value, price: +price.value, category_id: +catSel.value, image, show_online: +visSel.value };
       if (i.id) await API.put('/menu/items/' + i.id, body); else await API.post('/menu/items', body);
       closeModal(); toast('Saved'); go('menu');
     } }];
