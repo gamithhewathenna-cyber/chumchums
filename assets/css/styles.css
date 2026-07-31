@@ -81,6 +81,11 @@ label { font-size: 13px; color: var(--muted); display: block; margin-top: 8px; }
 .sidebar-foot .btn { justify-content: flex-start; }
 
 .main { display: flex; flex-direction: column; overflow: hidden; }
+.notify-bar { display: flex; align-items: center; gap: 12px; padding: 10px 22px;
+  background: var(--primary); color: #fff; font-weight: 600; font-size: 14px; }
+.notify-bar .btn { background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.35); color: #fff; }
+.notify-bar .btn:hover { background: rgba(255,255,255,.3); }
+.notify-bar .btn.ghost { background: transparent; border-color: transparent; }
 .topbar { display: flex; align-items: center; gap: 14px; padding: 14px 22px;
   border-bottom: 1px solid var(--border); background: var(--surface); }
 .topbar h2 { font-size: 19px; flex: 1; }

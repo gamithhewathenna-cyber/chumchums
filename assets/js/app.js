@@ -39,6 +39,10 @@ $('#themeBtn').onclick = () =>
   applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
 $('#menuToggle').onclick = () => $('#sidebar').classList.toggle('open');
 
+let notifyDismissedCount = 0;
+$('#notifyView').onclick = () => { $('#notifyBar').classList.add('hidden'); go('online'); };
+$('#notifyDismiss').onclick = () => { notifyDismissedCount = onlineOrderCount || 0; $('#notifyBar').classList.add('hidden'); };
+
 $('#clockBtn').onclick = () => {
   const c = el('div');
   c.append(el('p', { class: 'muted' }, 'Record your shift time:'));
@@ -102,6 +106,16 @@ async function pollOnlineOrders() {
     }
     if (onlineOrderCount !== null && pending.length > onlineOrderCount) toast('🔔 New online order received!');
     onlineOrderCount = pending.length;
+
+    const bar = $('#notifyBar');
+    if (pending.length === 0) {
+      notifyDismissedCount = 0; bar.classList.add('hidden');
+    } else if (pending.length > notifyDismissedCount) {
+      $('#notifyText').textContent = `🔔 ${pending.length} new online order${pending.length > 1 ? 's' : ''} waiting for review`;
+      bar.classList.remove('hidden');
+    } else {
+      bar.classList.add('hidden');
+    }
   } catch (e) { /* ignore transient poll failures */ }
 }
 
@@ -302,11 +316,15 @@ async function payOrder(id) {
 }
 
 // ================= ONLINE ORDERS =================
-let onlineTimer = null;
+let onlineTimer = null, onlineViewSig = null;
 VIEWS.online = async (v) => {
   clearInterval(onlineTimer);
+  onlineViewSig = null;
   const render = async () => {
     const [orders, tables] = await Promise.all([API.get('/orders?status=pending&source=online'), API.get('/tables')]);
+    const sig = orders.map(o => o.id).join(',');
+    if (sig === onlineViewSig) return; // nothing changed — skip the rebuild so the screen doesn't flicker
+    onlineViewSig = sig;
     v.innerHTML = '';
     v.append(el('div', { class: 'toolbar' }, el('span', { class: 'section-title', style: 'margin:0' }, 'Online Orders'),
       el('span', { class: 'muted' }, ' · auto-refresh 8s'), el('div', { class: 'spacer' }),
@@ -425,11 +443,15 @@ async function reservations() {
 }
 
 // ================= KDS =================
-let kdsTimer = null;
+let kdsTimer = null, kdsSig = null;
 VIEWS.kds = async (v) => {
   clearInterval(kdsTimer);
+  kdsSig = null;
   const render = async () => {
     const orders = await API.get('/orders/kds/active');
+    const sig = orders.map(o => `${o.id}:${o.kitchen_status}`).join('|');
+    if (sig === kdsSig) return; // nothing changed — skip the rebuild so the screen doesn't flicker
+    kdsSig = sig;
     v.innerHTML = '';
     v.append(el('div', { class: 'toolbar' }, el('span', { class: 'section-title', style: 'margin:0' }, 'Kitchen Display'),
       el('span', { class: 'muted' }, ' · auto-refresh 5s')));
