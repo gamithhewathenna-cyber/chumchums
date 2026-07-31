@@ -152,6 +152,12 @@ tr:hover td { background: var(--surface-2); }
 .menu-tile:hover { border-color: var(--primary); transform: translateY(-2px); }
 .menu-tile .tile-img { width: calc(100% + 24px); margin: -12px -12px 8px; display: block;
   aspect-ratio: 3/2; object-fit: cover; }
+.menu-tile .tile-noimg { display: flex; align-items: center; justify-content: center;
+  background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 500; }
+.menu-thumb { width: 48px; height: 32px; object-fit: cover; border-radius: 6px; display: block; }
+.menu-thumb-empty { display: flex; align-items: center; justify-content: center; text-align: center;
+  line-height: 1.1; background: var(--surface-2); color: var(--muted); font-size: 9px;
+  border: 1px dashed var(--border); }
 .menu-tile .nm { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .menu-tile .pr { color: var(--primary); font-weight: 700; }
 .menu-tile.out { opacity: .4; }

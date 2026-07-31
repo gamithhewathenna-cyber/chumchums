@@ -65,7 +65,7 @@ function renderMenu() {
   if (!items.length) { g.append(el('p', { class: 'muted' }, 'No items in this category')); return; }
   items.forEach(m => {
     const tile = el('div', { class: 'menu-tile', onClick: () => addToCart(m) });
-    if (m.image) tile.append(el('img', { class: 'tile-img', src: m.image, alt: '' }));
+    tile.append(m.image ? el('img', { class: 'tile-img', src: m.image, alt: '' }) : el('div', { class: 'tile-img tile-noimg' }, 'No Image'));
     tile.append(el('div', { class: 'nm' }, m.name), el('div', { class: 'pr' }, money(m.price)));
     g.append(tile);
   });

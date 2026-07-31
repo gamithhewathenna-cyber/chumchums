@@ -258,7 +258,7 @@ function renderMenu() {
   cartMenu.filter(m => !cartCat || m.category_id == cartCat).forEach(m => {
     const tile = el('div', { class: 'menu-tile' + (m.available ? '' : ' out'),
       onClick: () => m.available && addToCart(m) });
-    if (m.image) tile.append(el('img', { class: 'tile-img', src: m.image, alt: '' }));
+    tile.append(m.image ? el('img', { class: 'tile-img', src: m.image, alt: '' }) : el('div', { class: 'tile-img tile-noimg' }, 'No Image'));
     tile.append(el('div', { class: 'nm' }, m.name), el('div', { class: 'pr' }, money(m.price)));
     g.append(tile);
   });
@@ -584,6 +584,7 @@ VIEWS.menu = async (v) => {
     el('span', { class: 'section-title', style: 'margin:0' }, 'Menu'), el('div', { class: 'spacer' }),
     el('button', { class: 'btn', onClick: manageCategories }, '🗂️ Manage Categories'),
     el('button', { class: 'btn', onClick: () => editCategory() }, '+ Category'),
+    el('button', { class: 'btn', onClick: () => bulkAddItems(cats) }, '📋 Bulk Add Items'),
     el('button', { class: 'btn primary', onClick: () => editItem(null, cats) }, '+ Item'));
   v.append(toolbar);
 
@@ -635,7 +636,7 @@ VIEWS.menu = async (v) => {
       $$('.menu-row-check').forEach(c => c.checked = selectAll.checked);
       renderBulkBar();
     };
-    t.append(el('tr', {}, el('th', {}, selectAll), el('th', {}, 'Item'), el('th', {}, 'Category'),
+    t.append(el('tr', {}, el('th', {}, selectAll), el('th', {}, 'Image'), el('th', {}, 'Item'), el('th', {}, 'Category'),
       el('th', {}, 'Price'), el('th', {}, 'Available'), el('th', {}, 'Visibility'), el('th', {})));
     filtered.forEach(i => {
       const cat = cats.find(c => c.id === i.category_id)?.name || '—';
@@ -644,6 +645,7 @@ VIEWS.menu = async (v) => {
       check.checked = selected.has(i.id);
       check.onchange = () => { check.checked ? selected.add(i.id) : selected.delete(i.id); renderBulkBar(); };
       tr.append(el('td', {}, check));
+      tr.append(el('td', {}, i.image ? el('img', { class: 'menu-thumb', src: i.image }) : el('div', { class: 'menu-thumb menu-thumb-empty' }, 'No Image')));
       tr.append(el('td', {}, i.name), el('td', {}, cat), el('td', {}, money(i.price)));
       const avail = el('td'); const toggle = el('button', { class: 'btn sm ' + (i.available ? 'primary' : ''),
         onClick: async () => { await API.patch(`/menu/items/${i.id}/availability`, { available: i.available ? 0 : 1 }); go('menu'); } },
@@ -676,11 +678,36 @@ function editCategory(c = {}) {
 async function manageCategories() {
   const cats = await API.get('/menu/categories');
   const c = el('div');
+  const selected = new Set();
   if (!cats.length) c.append(el('p', { class: 'muted' }, 'No categories yet'));
   else {
-    const t = el('table'); t.innerHTML = '<tr><th>Name</th><th></th></tr>';
+    const bulkBar = el('div', { class: 'toolbar hidden', style: 'margin-bottom:10px' });
+    const renderBulk = () => {
+      bulkBar.innerHTML = '';
+      bulkBar.classList.toggle('hidden', !selected.size);
+      if (!selected.size) return;
+      bulkBar.append(
+        el('span', { class: 'muted' }, `${selected.size} selected`),
+        el('button', { class: 'btn sm danger', onClick: () => confirmDialog(`Delete ${selected.size} selected categor${selected.size > 1 ? 'ies' : 'y'}? Items in them will become uncategorized.`, async () => {
+          await Promise.all([...selected].map(id => API.del('/menu/categories/' + id)));
+          toast('Deleted'); await go('menu'); manageCategories();
+        }) }, '🗑️ Delete Selected'),
+        el('button', { class: 'btn sm ghost', onClick: () => { selected.clear(); $$('.cat-row-check').forEach(x => x.checked = false); $('#catSelectAll').checked = false; renderBulk(); } }, 'Clear'));
+    };
+    c.append(bulkBar);
+    const t = el('table');
+    const selectAll = el('input', { type: 'checkbox', id: 'catSelectAll', style: 'width:auto;margin:0' });
+    selectAll.onchange = () => {
+      cats.forEach(cat => selectAll.checked ? selected.add(cat.id) : selected.delete(cat.id));
+      $$('.cat-row-check').forEach(x => x.checked = selectAll.checked);
+      renderBulk();
+    };
+    t.append(el('tr', {}, el('th', {}, selectAll), el('th', {}, 'Name'), el('th', {})));
     cats.forEach(cat => {
       const tr = el('tr');
+      const check = el('input', { type: 'checkbox', class: 'cat-row-check', style: 'width:auto;margin:0' });
+      check.onchange = () => { check.checked ? selected.add(cat.id) : selected.delete(cat.id); renderBulk(); };
+      tr.append(el('td', {}, check));
       tr.append(el('td', {}, cat.name));
       tr.append(el('td', { class: 'row' },
         el('button', { class: 'btn sm', onClick: () => { closeModal(); editCategory(cat); } }, 'Edit'),
@@ -694,6 +721,41 @@ async function manageCategories() {
   modal('Manage Categories', c, [
     { label: 'Close', onClick: closeModal },
     { label: '+ New Category', primary: true, onClick: () => { closeModal(); editCategory(); } },
+  ]);
+}
+function bulkAddItems(cats) {
+  if (!cats.length) { toast('Create a category first'); return; }
+  const catSel = el('select'); cats.forEach(c => catSel.append(el('option', { value: c.id }, c.name)));
+  const textarea = el('textarea', { rows: 10,
+    placeholder: 'One item per line — name then price, e.g.\nParata  $3.95\nChicken Pan Roll $4.95\nFish Pan Roll $4.95\nLavariya $6.95' });
+  const preview = el('div', { class: 'muted', style: 'margin-top:8px;font-size:13px' });
+  const err = el('div', { class: 'err' });
+  const parse = () => {
+    const lines = textarea.value.split('\n').map(l => l.trim()).filter(Boolean);
+    const parsed = [], failed = [];
+    lines.forEach(line => {
+      const m = line.match(/^(.+?)\s+\$?(\d+(?:\.\d{1,2})?)\s*$/);
+      if (m) parsed.push({ name: m[1].trim(), price: parseFloat(m[2]) });
+      else failed.push(line);
+    });
+    preview.textContent = parsed.length ? `✔ ${parsed.length} item${parsed.length > 1 ? 's' : ''} ready to add — images can be added later from Edit` : '';
+    err.textContent = failed.length ? `Couldn't read: ${failed.join(' · ')}` : '';
+    return parsed;
+  };
+  textarea.addEventListener('input', parse);
+  const c = el('div', {},
+    el('label', {}, 'Category (all items below will be added to this category)'), catSel,
+    el('label', {}, 'Items — one per line, name then price'), textarea, preview, err);
+  modal('Bulk Add Menu Items', c, [
+    { label: 'Cancel', onClick: closeModal },
+    { label: 'Add Items', primary: true, onClick: async (e) => {
+      const parsed = parse();
+      if (!parsed.length) { err.textContent = 'No valid items to add — check the format'; return; }
+      const btn = e.target; btn.disabled = true;
+      await Promise.all(parsed.map(p => API.post('/menu/items',
+        { name: p.name, price: p.price, category_id: +catSel.value, description: '', show_online: 1 })));
+      closeModal(); toast(`Added ${parsed.length} item${parsed.length > 1 ? 's' : ''}`); go('menu');
+    } }
   ]);
 }
 function editItem(i, cats) {
