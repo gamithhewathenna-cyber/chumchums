@@ -61,14 +61,29 @@ if ($sub === 'checkout' && $method === 'POST') {
     $qty = max(1, min(20, (int)($ci['qty'] ?? 1)));
     $mi = one("SELECT * FROM menu_items WHERE id=? AND available=1 AND show_online=1", [$mid]);
     if (!$mi) continue;
-    $modifiers = []; $extraTotal = 0;
+    $modifiers = []; $unitPrice = (float)$mi['price'];
+
+    // Size / variation — replaces the base price rather than adding to it
+    $variations = $mi['variations'] ? json_decode($mi['variations'], true) : [];
+    if ($variations && !empty($ci['variation_name'])) {
+      foreach ($variations as $v) {
+        if (($v['name'] ?? '') === $ci['variation_name']) {
+          $unitPrice = (float)$v['price'];
+          $modifiers[] = ['name' => 'Size: ' . $v['name'], 'price' => 0];
+          break;
+        }
+      }
+    }
+
+    // Extras — add on top of the (possibly size-based) unit price
+    $extraTotal = 0;
     if ($mi['addon_group_id']) {
       foreach (($ci['addon_item_ids'] ?? []) as $aid) {
         $ai = one("SELECT * FROM addon_items WHERE id=? AND group_id=?", [(int)$aid, $mi['addon_group_id']]);
-        if ($ai) { $modifiers[] = ['name' => $ai['name'], 'price' => (float)$ai['price']]; $extraTotal += (float)$ai['price']; }
+        if ($ai) { $modifiers[] = ['id' => $ai['id'], 'name' => $ai['name'], 'price' => (float)$ai['price']]; $extraTotal += (float)$ai['price']; }
       }
     }
-    $verified[] = ['menu_item_id' => $mi['id'], 'name' => $mi['name'], 'price' => (float)$mi['price'] + $extraTotal,
+    $verified[] = ['menu_item_id' => $mi['id'], 'name' => $mi['name'], 'price' => $unitPrice + $extraTotal,
       'qty' => $qty, 'modifiers' => $modifiers];
   }
   if (!$verified) json_out(['error' => 'None of the selected items are available'], 400);

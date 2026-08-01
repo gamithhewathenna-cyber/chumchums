@@ -84,7 +84,7 @@ if ($sub === 'items') {
       inp('image', $cur['image']), inp('available', $cur['available']),
       inp('show_online', $cur['show_online']),
       inp('addon_group_id', $cur['addon_group_id']) ?: null,
-      inp('variations') ? json_encode(inp('variations')) : $cur['variations'],
+      inp('variations') !== null ? json_encode(inp('variations')) : $cur['variations'],
       inp('addons') ? json_encode(inp('addons')) : $cur['addons'],
       inp('is_combo', $cur['is_combo']), $id]);
     json_out(['ok' => true]);

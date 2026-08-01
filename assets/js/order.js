@@ -64,51 +64,77 @@ function renderMenu() {
   const items = ITEMS.filter(m => ACTIVE_CAT === null || m.category_id === ACTIVE_CAT);
   if (!items.length) { g.append(el('p', { class: 'muted' }, 'No items in this category')); return; }
   items.forEach(m => {
-    const tile = el('div', { class: 'menu-tile', onClick: () => m.addon_group_id ? openExtrasModal(m) : addToCart(m) });
+    const needsCustomize = m.addon_group_id || (m.variations && m.variations.length);
+    const tile = el('div', { class: 'menu-tile', onClick: () => needsCustomize ? openCustomizeModal(m) : addToCart(m) });
     tile.append(m.image ? el('img', { class: 'tile-img', src: m.image, alt: '' }) : el('div', { class: 'tile-img tile-noimg' }, 'No Image'));
     tile.append(el('div', { class: 'nm' }, m.name), el('div', { class: 'pr' }, money(m.price)));
     g.append(tile);
   });
 }
 
-function openExtrasModal(m) {
-  const group = ADDON_GROUPS.find(g => g.id === m.addon_group_id);
-  if (!group || !group.items.length) { addToCart(m); return; }
-  const selected = new Set();
-  const list = el('div');
+function openCustomizeModal(m) {
+  const hasSizes = m.variations && m.variations.length;
+  const group = m.addon_group_id ? ADDON_GROUPS.find(g => g.id === m.addon_group_id) : null;
+  const hasExtras = group && group.items.length;
+  if (!hasSizes && !hasExtras) { addToCart(m); return; }
+
+  let sizeIdx = 0;
+  const selectedExtras = new Set();
   const totalLine = el('div', { class: 'tot-row big', style: 'margin-top:10px' });
   const updateTotal = () => {
-    const extra = group.items.filter(it => selected.has(it.id)).reduce((s, it) => s + Number(it.price), 0);
-    totalLine.innerHTML = ''; totalLine.append(el('span', {}, 'Total'), el('span', {}, money(Number(m.price) + extra)));
+    const base = hasSizes ? Number(m.variations[sizeIdx].price) : Number(m.price);
+    const extra = hasExtras ? group.items.filter(it => selectedExtras.has(it.id)).reduce((s, it) => s + Number(it.price), 0) : 0;
+    totalLine.innerHTML = ''; totalLine.append(el('span', {}, 'Total'), el('span', {}, money(base + extra)));
   };
-  group.items.forEach(it => {
-    const input = el('input', { type: group.selection_type === 'single' ? 'radio' : 'checkbox', name: 'extras', style: 'width:auto;margin:0' });
-    input.onchange = () => {
-      if (group.selection_type === 'single') { selected.clear(); if (input.checked) selected.add(it.id); }
-      else { input.checked ? selected.add(it.id) : selected.delete(it.id); }
-      updateTotal();
-    };
-    list.append(el('label', { class: 'row', style: 'gap:8px;font-weight:400' }, input, `${it.name} (+${money(it.price)})`));
-  });
+
+  const sections = [];
+  if (hasSizes) {
+    const sizeList = el('div');
+    m.variations.forEach((v, idx) => {
+      const input = el('input', { type: 'radio', name: 'size', style: 'width:auto;margin:0' });
+      input.checked = idx === 0;
+      input.onchange = () => { sizeIdx = idx; updateTotal(); };
+      sizeList.append(el('label', { class: 'row', style: 'gap:8px;font-weight:400' }, input, `${v.name} (${money(v.price)})`));
+    });
+    sections.push(el('p', { class: 'muted', style: 'margin-top:0' }, 'Choose size:'), sizeList);
+  }
+  if (hasExtras) {
+    const list = el('div');
+    group.items.forEach(it => {
+      const input = el('input', { type: group.selection_type === 'single' ? 'radio' : 'checkbox', name: 'extras', style: 'width:auto;margin:0' });
+      input.onchange = () => {
+        if (group.selection_type === 'single') { selectedExtras.clear(); if (input.checked) selectedExtras.add(it.id); }
+        else { input.checked ? selectedExtras.add(it.id) : selectedExtras.delete(it.id); }
+        updateTotal();
+      };
+      list.append(el('label', { class: 'row', style: 'gap:8px;font-weight:400' }, input, `${it.name} (+${money(it.price)})`));
+    });
+    sections.push(el('p', { class: 'muted', style: hasSizes ? '' : 'margin-top:0' },
+      group.selection_type === 'single' ? 'Choose one extra:' : 'Choose any extras:'), list);
+  }
   updateTotal();
-  const c = el('div', {}, el('p', { class: 'muted', style: 'margin-top:0' },
-    group.selection_type === 'single' ? 'Choose one:' : 'Choose any:'), list, totalLine);
-  modal('Add Extras — ' + m.name, c, [
+  const c = el('div', {}, ...sections, totalLine);
+  modal('Customize — ' + m.name, c, [
     { label: 'Cancel', onClick: closeModal },
     { label: 'Add to Cart', primary: true, onClick: () => {
-      const chosen = group.items.filter(it => selected.has(it.id)).map(it => ({ id: it.id, name: it.name, price: Number(it.price) }));
-      const extraTotal = chosen.reduce((s, it) => s + it.price, 0);
-      addToCart(m, chosen, extraTotal);
+      const modifiers = [];
+      let unitPrice = Number(m.price);
+      if (hasSizes) { unitPrice = Number(m.variations[sizeIdx].price); modifiers.push({ name: 'Size: ' + m.variations[sizeIdx].name, price: 0 }); }
+      if (hasExtras) group.items.filter(it => selectedExtras.has(it.id)).forEach(it => {
+        modifiers.push({ id: it.id, name: it.name, price: Number(it.price) }); unitPrice += Number(it.price);
+      });
+      addToCart(m, modifiers.length ? modifiers : null, unitPrice, hasSizes ? m.variations[sizeIdx].name : null);
       closeModal();
     } }
   ]);
 }
 
-function addToCart(m, modifiers = null, extraPrice = 0) {
-  const modKey = modifiers ? JSON.stringify(modifiers.map(x => x.id)) : '';
+function addToCart(m, modifiers = null, unitPrice = null, variationName = null) {
+  const price = unitPrice != null ? unitPrice : Number(m.price);
+  const modKey = modifiers ? JSON.stringify(modifiers) : '';
   const line = CART.find(c => c.menu_item_id === m.id && (c._modKey || '') === modKey);
   if (line) line.qty++;
-  else CART.push({ menu_item_id: m.id, name: m.name, price: Number(m.price) + Number(extraPrice), qty: 1, modifiers: modifiers || undefined, _modKey: modKey });
+  else CART.push({ menu_item_id: m.id, name: m.name, price, qty: 1, modifiers: modifiers || undefined, variation_name: variationName, _modKey: modKey });
   renderCart();
 }
 
@@ -170,7 +196,10 @@ $('#payBtn').onclick = async () => {
   try {
     const res = await apiPost('/public/checkout', {
       table_id: tableId, customer_name: name, customer_email: email, customer_phone: phone, notes,
-      items: CART.map(c => ({ menu_item_id: c.menu_item_id, qty: c.qty, addon_item_ids: (c.modifiers || []).map(mo => mo.id) })),
+      items: CART.map(c => ({
+        menu_item_id: c.menu_item_id, qty: c.qty, variation_name: c.variation_name || null,
+        addon_item_ids: (c.modifiers || []).filter(mo => mo.id != null).map(mo => mo.id),
+      })),
     });
     location.href = res.checkout_url;
   } catch (e) {

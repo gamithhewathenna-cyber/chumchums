@@ -260,50 +260,76 @@ VIEWS.pos = async (v) => {
 function renderMenu() {
   const g = $('#menuGrid'); g.innerHTML = '';
   cartMenu.filter(m => !cartCat || m.category_id == cartCat).forEach(m => {
+    const needsCustomize = m.addon_group_id || (m.variations && m.variations.length);
     const tile = el('div', { class: 'menu-tile' + (m.available ? '' : ' out'),
-      onClick: () => m.available && (m.addon_group_id ? openExtrasModal(m) : addToCart(m)) });
+      onClick: () => m.available && (needsCustomize ? openCustomizeModal(m) : addToCart(m)) });
     tile.append(m.image ? el('img', { class: 'tile-img', src: m.image, alt: '' }) : el('div', { class: 'tile-img tile-noimg' }, 'No Image'));
     tile.append(el('div', { class: 'nm' }, m.name), el('div', { class: 'pr' }, money(m.price)));
     g.append(tile);
   });
 }
-function openExtrasModal(m) {
-  const group = cartAddonGroups.find(g => g.id === m.addon_group_id);
-  if (!group || !group.items.length) { addToCart(m); return; }
-  const selected = new Set();
-  const list = el('div');
+function openCustomizeModal(m) {
+  const hasSizes = m.variations && m.variations.length;
+  const group = m.addon_group_id ? cartAddonGroups.find(g => g.id === m.addon_group_id) : null;
+  const hasExtras = group && group.items.length;
+  if (!hasSizes && !hasExtras) { addToCart(m); return; }
+
+  let sizeIdx = 0;
+  const selectedExtras = new Set();
   const totalLine = el('div', { class: 'tot-row big', style: 'margin-top:10px' });
   const updateTotal = () => {
-    const extra = group.items.filter(it => selected.has(it.id)).reduce((s, it) => s + Number(it.price), 0);
-    totalLine.innerHTML = ''; totalLine.append(el('span', {}, 'Total'), el('span', {}, money(Number(m.price) + extra)));
+    const base = hasSizes ? Number(m.variations[sizeIdx].price) : Number(m.price);
+    const extra = hasExtras ? group.items.filter(it => selectedExtras.has(it.id)).reduce((s, it) => s + Number(it.price), 0) : 0;
+    totalLine.innerHTML = ''; totalLine.append(el('span', {}, 'Total'), el('span', {}, money(base + extra)));
   };
-  group.items.forEach(it => {
-    const input = el('input', { type: group.selection_type === 'single' ? 'radio' : 'checkbox', name: 'extras', style: 'width:auto;margin:0' });
-    input.onchange = () => {
-      if (group.selection_type === 'single') { selected.clear(); if (input.checked) selected.add(it.id); }
-      else { input.checked ? selected.add(it.id) : selected.delete(it.id); }
-      updateTotal();
-    };
-    list.append(el('label', { class: 'row', style: 'gap:8px;font-weight:400' }, input, `${it.name} (+${money(it.price)})`));
-  });
+
+  const sections = [];
+  if (hasSizes) {
+    const sizeList = el('div');
+    m.variations.forEach((v, idx) => {
+      const input = el('input', { type: 'radio', name: 'size', style: 'width:auto;margin:0' });
+      input.checked = idx === 0;
+      input.onchange = () => { sizeIdx = idx; updateTotal(); };
+      sizeList.append(el('label', { class: 'row', style: 'gap:8px;font-weight:400' }, input, `${v.name} (${money(v.price)})`));
+    });
+    sections.push(el('p', { class: 'muted', style: 'margin-top:0' }, 'Choose size:'), sizeList);
+  }
+  if (hasExtras) {
+    const list = el('div');
+    group.items.forEach(it => {
+      const input = el('input', { type: group.selection_type === 'single' ? 'radio' : 'checkbox', name: 'extras', style: 'width:auto;margin:0' });
+      input.onchange = () => {
+        if (group.selection_type === 'single') { selectedExtras.clear(); if (input.checked) selectedExtras.add(it.id); }
+        else { input.checked ? selectedExtras.add(it.id) : selectedExtras.delete(it.id); }
+        updateTotal();
+      };
+      list.append(el('label', { class: 'row', style: 'gap:8px;font-weight:400' }, input, `${it.name} (+${money(it.price)})`));
+    });
+    sections.push(el('p', { class: 'muted', style: hasSizes ? '' : 'margin-top:0' },
+      group.selection_type === 'single' ? 'Choose one extra:' : 'Choose any extras:'), list);
+  }
   updateTotal();
-  const c = el('div', {}, el('p', { class: 'muted', style: 'margin-top:0' },
-    group.selection_type === 'single' ? 'Choose one:' : 'Choose any:'), list, totalLine);
-  modal('Add Extras — ' + m.name, c, [
+  const c = el('div', {}, ...sections, totalLine);
+  modal('Customize — ' + m.name, c, [
     { label: 'Cancel', onClick: closeModal },
     { label: 'Add to Cart', primary: true, onClick: () => {
-      const chosen = group.items.filter(it => selected.has(it.id)).map(it => ({ name: it.name, price: Number(it.price) }));
-      const extraTotal = chosen.reduce((s, it) => s + it.price, 0);
-      addToCart(m, chosen.length ? chosen : null, extraTotal);
+      const modifiers = [];
+      let unitPrice = Number(m.price);
+      if (hasSizes) { unitPrice = Number(m.variations[sizeIdx].price); modifiers.push({ name: 'Size: ' + m.variations[sizeIdx].name, price: 0 }); }
+      if (hasExtras) group.items.filter(it => selectedExtras.has(it.id)).forEach(it => {
+        modifiers.push({ id: it.id, name: it.name, price: Number(it.price) }); unitPrice += Number(it.price);
+      });
+      addToCart(m, modifiers.length ? modifiers : null, unitPrice, hasSizes ? m.variations[sizeIdx].name : null);
       closeModal();
     } }
   ]);
 }
-function addToCart(m, modifiers = null, extraPrice = 0) {
+function addToCart(m, modifiers = null, unitPrice = null, variationName = null) {
+  const price = unitPrice != null ? unitPrice : Number(m.price);
   const modKey = modifiers ? JSON.stringify(modifiers) : '';
   const line = cart.find(c => c.menu_item_id === m.id && (c._modKey || '') === modKey);
   if (line) line.qty++;
-  else cart.push({ menu_item_id: m.id, name: m.name, price: Number(m.price) + Number(extraPrice), qty: 1, modifiers: modifiers || undefined, _modKey: modKey });
+  else cart.push({ menu_item_id: m.id, name: m.name, price, qty: 1, modifiers: modifiers || undefined, variation_name: variationName, _modKey: modKey });
   renderCart();
 }
 function renderCart() {
@@ -988,15 +1014,33 @@ function editItem(i, cats, groups = []) {
   groupSel.append(el('option', { value: '' }, 'No extras'));
   groups.forEach(g => groupSel.append(el('option', { value: g.id, selected: g.id === i.addon_group_id }, g.name)));
 
+  let variations = (i.variations || []).map(v => ({ name: v.name, price: v.price }));
+  const varList = el('div');
+  function renderVarList() {
+    varList.innerHTML = '';
+    variations.forEach((v, idx) => {
+      const nameInp = el('input', { value: v.name, placeholder: 'Size, e.g. Large', style: 'flex:2;width:auto' });
+      const priceInp = el('input', { type: 'number', step: '0.01', value: v.price, placeholder: 'Price', style: 'flex:1;width:auto' });
+      nameInp.oninput = () => { v.name = nameInp.value; };
+      priceInp.oninput = () => { v.price = priceInp.value; };
+      const removeBtn = el('button', { class: 'btn sm danger', onClick: () => { variations.splice(idx, 1); renderVarList(); } }, '✕');
+      varList.append(el('div', { class: 'row', style: 'margin-bottom:6px' }, nameInp, priceInp, removeBtn));
+    });
+  }
+  renderVarList();
+  const addVarBtn = el('button', { class: 'btn sm', onClick: () => { variations.push({ name: '', price: 0 }); renderVarList(); } }, '+ Add Size');
+
   const c = el('div', {}, el('label', {}, 'Name'), name, el('label', {}, 'Description'), desc,
     el('label', {}, 'Category'), catSel, el('label', {}, 'Price'), price,
     el('label', {}, 'Photo (300×200)'), el('div', { class: 'logo-upload' }, preview, emptyState, fileInput, removeImgBtn),
     el('label', {}, 'Website Visibility'), visSel,
-    el('label', {}, 'Extras / Add-ons Group'), groupSel);
+    el('label', {}, 'Extras / Add-ons Group'), groupSel,
+    el('label', {}, 'Sizes (optional — e.g. Small/Large, each with its own price)'), varList, addVarBtn);
   const acts = [{ label: 'Cancel', onClick: closeModal },
     { label: 'Save', primary: true, onClick: async () => {
+      const cleanVariations = variations.filter(v => v.name.trim()).map(v => ({ name: v.name.trim(), price: +v.price || 0 }));
       const body = { name: name.value, description: desc.value, price: +price.value, category_id: +catSel.value, image,
-        show_online: +visSel.value, addon_group_id: groupSel.value || null };
+        show_online: +visSel.value, addon_group_id: groupSel.value || null, variations: cleanVariations };
       if (i.id) await API.put('/menu/items/' + i.id, body); else await API.post('/menu/items', body);
       closeModal(); toast('Saved'); go('menu');
     } }];
