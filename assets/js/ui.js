@@ -35,6 +35,10 @@ let CUR = '$';
 const money = n => CUR + Number(n || 0).toFixed(2);
 const fmtDate = s => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleString() : '';
 
+// For items with sizes, show the cheapest size's price instead of the (unused) base price
+const displayPrice = m => (m.variations && m.variations.length) ? Math.min(...m.variations.map(v => Number(v.price))) : Number(m.price);
+const priceLabel = m => (m.variations && m.variations.length > 1 ? 'From ' : '') + money(displayPrice(m));
+
 function copyToClipboard(text) {
   navigator.clipboard.writeText(text).then(() => toast('Copied!')).catch(() => toast('Copy failed'));
 }

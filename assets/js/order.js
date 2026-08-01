@@ -67,7 +67,7 @@ function renderMenu() {
     const needsCustomize = m.addon_group_id || (m.variations && m.variations.length);
     const tile = el('div', { class: 'menu-tile', onClick: () => needsCustomize ? openCustomizeModal(m) : addToCart(m) });
     tile.append(m.image ? el('img', { class: 'tile-img', src: m.image, alt: '' }) : el('div', { class: 'tile-img tile-noimg' }, 'No Image'));
-    tile.append(el('div', { class: 'nm' }, m.name), el('div', { class: 'pr' }, money(m.price)));
+    tile.append(el('div', { class: 'nm' }, m.name), el('div', { class: 'pr' }, priceLabel(m)));
     g.append(tile);
   });
 }
@@ -78,7 +78,7 @@ function openCustomizeModal(m) {
   const hasExtras = group && group.items.length;
   if (!hasSizes && !hasExtras) { addToCart(m); return; }
 
-  let sizeIdx = 0;
+  let sizeIdx = hasSizes ? m.variations.reduce((mi, v, idx, arr) => Number(v.price) < Number(arr[mi].price) ? idx : mi, 0) : 0;
   const selectedExtras = new Set();
   const totalLine = el('div', { class: 'tot-row big', style: 'margin-top:10px' });
   const updateTotal = () => {
@@ -92,7 +92,7 @@ function openCustomizeModal(m) {
     const sizeList = el('div');
     m.variations.forEach((v, idx) => {
       const input = el('input', { type: 'radio', name: 'size', style: 'width:auto;margin:0' });
-      input.checked = idx === 0;
+      input.checked = idx === sizeIdx;
       input.onchange = () => { sizeIdx = idx; updateTotal(); };
       sizeList.append(el('label', { class: 'row', style: 'gap:8px;font-weight:400' }, input, `${v.name} (${money(v.price)})`));
     });

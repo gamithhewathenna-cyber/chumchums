@@ -264,7 +264,7 @@ function renderMenu() {
     const tile = el('div', { class: 'menu-tile' + (m.available ? '' : ' out'),
       onClick: () => m.available && (needsCustomize ? openCustomizeModal(m) : addToCart(m)) });
     tile.append(m.image ? el('img', { class: 'tile-img', src: m.image, alt: '' }) : el('div', { class: 'tile-img tile-noimg' }, 'No Image'));
-    tile.append(el('div', { class: 'nm' }, m.name), el('div', { class: 'pr' }, money(m.price)));
+    tile.append(el('div', { class: 'nm' }, m.name), el('div', { class: 'pr' }, priceLabel(m)));
     g.append(tile);
   });
 }
@@ -274,7 +274,7 @@ function openCustomizeModal(m) {
   const hasExtras = group && group.items.length;
   if (!hasSizes && !hasExtras) { addToCart(m); return; }
 
-  let sizeIdx = 0;
+  let sizeIdx = hasSizes ? m.variations.reduce((mi, v, idx, arr) => Number(v.price) < Number(arr[mi].price) ? idx : mi, 0) : 0;
   const selectedExtras = new Set();
   const totalLine = el('div', { class: 'tot-row big', style: 'margin-top:10px' });
   const updateTotal = () => {
@@ -288,7 +288,7 @@ function openCustomizeModal(m) {
     const sizeList = el('div');
     m.variations.forEach((v, idx) => {
       const input = el('input', { type: 'radio', name: 'size', style: 'width:auto;margin:0' });
-      input.checked = idx === 0;
+      input.checked = idx === sizeIdx;
       input.onchange = () => { sizeIdx = idx; updateTotal(); };
       sizeList.append(el('label', { class: 'row', style: 'gap:8px;font-weight:400' }, input, `${v.name} (${money(v.price)})`));
     });
@@ -729,7 +729,7 @@ VIEWS.menu = async (v) => {
       check.onchange = () => { check.checked ? selected.add(i.id) : selected.delete(i.id); renderBulkBar(); };
       tr.append(el('td', {}, check));
       tr.append(el('td', {}, i.image ? el('img', { class: 'menu-thumb', src: i.image }) : el('div', { class: 'menu-thumb menu-thumb-empty' }, 'No Image')));
-      tr.append(el('td', {}, i.name), el('td', {}, cat), el('td', {}, money(i.price)));
+      tr.append(el('td', {}, i.name), el('td', {}, cat), el('td', {}, priceLabel(i)));
       const avail = el('td'); const toggle = el('button', { class: 'btn sm ' + (i.available ? 'primary' : ''),
         onClick: async () => { await API.patch(`/menu/items/${i.id}/availability`, { available: i.available ? 0 : 1 }); go('menu'); } },
         i.available ? 'On' : 'Off'); avail.append(toggle); tr.append(avail);
