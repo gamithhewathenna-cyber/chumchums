@@ -653,8 +653,10 @@ function showKdsSummary(orders) {
 }
 
 // ================= MENU MANAGEMENT =================
+let menuActiveCat = 'all'; // persists across go('menu') reloads (e.g. after saving an item) so the tab doesn't reset
 VIEWS.menu = async (v) => {
   const [cats, items, groups] = await Promise.all([API.get('/menu/categories'), API.get('/menu/items'), API.get('/addons/groups')]);
+  if (menuActiveCat !== 'all' && !cats.some(c => c.id === menuActiveCat)) menuActiveCat = 'all'; // category was deleted
   v.innerHTML = '';
   const toolbar = el('div', { class: 'toolbar' },
     el('span', { class: 'section-title', style: 'margin:0' }, 'Menu'), el('div', { class: 'spacer' }),
@@ -665,12 +667,11 @@ VIEWS.menu = async (v) => {
     el('button', { class: 'btn primary', onClick: () => editItem(null, cats, groups) }, '+ Item'));
   v.append(toolbar);
 
-  let activeCat = 'all';
   let searchQ = '';
   const selected = new Set();
   const catRow = el('div', { class: 'cats' });
-  const pill = (id, label) => el('div', { class: 'cat-pill' + (id === activeCat ? ' active' : ''), onClick: (e) => {
-    activeCat = id; selected.clear(); $$('.cats .cat-pill').forEach(p => p.classList.remove('active')); e.target.classList.add('active'); renderTable();
+  const pill = (id, label) => el('div', { class: 'cat-pill' + (id === menuActiveCat ? ' active' : ''), onClick: (e) => {
+    menuActiveCat = id; selected.clear(); $$('.cats .cat-pill').forEach(p => p.classList.remove('active')); e.target.classList.add('active'); renderTable();
   } }, label);
   catRow.append(pill('all', 'All'));
   cats.forEach(c => catRow.append(pill(c.id, c.name)));
@@ -719,7 +720,7 @@ VIEWS.menu = async (v) => {
 
   function renderTable() {
     card.innerHTML = ''; renderBulkBar();
-    const filtered = items.filter(i => (activeCat === 'all' || i.category_id === activeCat) && (!searchQ || i.name.toLowerCase().includes(searchQ)));
+    const filtered = items.filter(i => (menuActiveCat === 'all' || i.category_id === menuActiveCat) && (!searchQ || i.name.toLowerCase().includes(searchQ)));
     if (!filtered.length) { card.append(el('p', { class: 'muted' }, searchQ ? 'No items match your search' : 'No items in this category')); return; }
     const t = el('table');
     const selectAll = el('input', { type: 'checkbox', id: 'menuSelectAll', style: 'width:auto;margin:0' });
