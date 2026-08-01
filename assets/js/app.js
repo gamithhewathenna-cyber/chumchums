@@ -933,17 +933,30 @@ function editAddonExtra(group, item = {}) {
 function bulkAddItems(cats) {
   if (!cats.length) { toast('Create a category first'); return; }
   const catSel = el('select'); cats.forEach(c => catSel.append(el('option', { value: c.id }, c.name)));
+  const sizeMode = el('input', { type: 'checkbox', style: 'width:auto;margin:0' });
   const textarea = el('textarea', { rows: 10,
     placeholder: 'One item per line — name then price, e.g.\nParata  $3.95\nChicken Pan Roll $4.95\nFish Pan Roll $4.95\nLavariya $6.95' });
   const preview = el('div', { class: 'muted', style: 'margin-top:8px;font-size:13px' });
   const err = el('div', { class: 'err' });
+  const setPlaceholder = () => {
+    textarea.placeholder = sizeMode.checked
+      ? 'One item per line — name, small price, large price, e.g.\nEgg Rice, 19, 25\nChicken Fried Rice, 20, 28'
+      : 'One item per line — name then price, e.g.\nParata  $3.95\nChicken Pan Roll $4.95\nFish Pan Roll $4.95\nLavariya $6.95';
+  };
+  sizeMode.addEventListener('change', () => { setPlaceholder(); parse(); });
   const parse = () => {
     const lines = textarea.value.split('\n').map(l => l.trim()).filter(Boolean);
     const parsed = [], failed = [];
     lines.forEach(line => {
-      const m = line.match(/^(.+?)\s+\$?(\d+(?:\.\d{1,2})?)\s*$/);
-      if (m) parsed.push({ name: m[1].trim(), price: parseFloat(m[2]) });
-      else failed.push(line);
+      if (sizeMode.checked) {
+        const m = line.match(/^(.+?),\s*\$?([\d,]+(?:\.\d{1,2})?)\s*,\s*\$?([\d,]+(?:\.\d{1,2})?)\s*$/);
+        if (m) parsed.push({ name: m[1].trim(), small: parseFloat(m[2].replace(/,/g, '')), large: parseFloat(m[3].replace(/,/g, '')) });
+        else failed.push(line);
+      } else {
+        const m = line.match(/^(.+?)\s+\$?(\d+(?:\.\d{1,2})?)\s*$/);
+        if (m) parsed.push({ name: m[1].trim(), price: parseFloat(m[2]) });
+        else failed.push(line);
+      }
     });
     preview.textContent = parsed.length ? `✔ ${parsed.length} item${parsed.length > 1 ? 's' : ''} ready to add — images can be added later from Edit` : '';
     err.textContent = failed.length ? `Couldn't read: ${failed.join(' · ')}` : '';
@@ -952,15 +965,18 @@ function bulkAddItems(cats) {
   textarea.addEventListener('input', parse);
   const c = el('div', {},
     el('label', {}, 'Category (all items below will be added to this category)'), catSel,
-    el('label', {}, 'Items — one per line, name then price'), textarea, preview, err);
+    el('label', { class: 'row', style: 'gap:8px;margin-top:10px' }, sizeMode, 'These items have Small / Large pricing'),
+    el('label', {}, 'Items'), textarea, preview, err);
   modal('Bulk Add Menu Items', c, [
     { label: 'Cancel', onClick: closeModal },
     { label: 'Add Items', primary: true, onClick: async () => {
       const parsed = parse();
       if (!parsed.length) { err.textContent = 'No valid items to add — check the format'; return; }
       try {
-        await Promise.all(parsed.map(p => API.post('/menu/items',
-          { name: p.name, price: p.price, category_id: +catSel.value, description: '', show_online: 1 })));
+        await Promise.all(parsed.map(p => sizeMode.checked
+          ? API.post('/menu/items', { name: p.name, price: p.small, category_id: +catSel.value, description: '', show_online: 1,
+              variations: [{ name: 'Small', price: p.small }, { name: 'Large', price: p.large }] })
+          : API.post('/menu/items', { name: p.name, price: p.price, category_id: +catSel.value, description: '', show_online: 1 })));
         closeModal(); toast(`Added ${parsed.length} item${parsed.length > 1 ? 's' : ''}`); go('menu');
       } catch (apiErr) { err.textContent = apiErr.message || 'Failed to add items'; }
     } }
