@@ -940,7 +940,7 @@ function editItem(i, cats, groups = []) {
   const c = el('div', {}, el('label', {}, 'Name'), name, el('label', {}, 'Description'), desc,
     el('label', {}, 'Category'), catSel, el('label', {}, 'Price'), price,
     el('label', {}, 'Photo (300×200)'), el('div', { class: 'logo-upload' }, preview, emptyState, fileInput, removeImgBtn),
-    el('label', {}, 'Availability'), visSel,
+    el('label', {}, 'Website Visibility'), visSel,
     el('label', {}, 'Extras / Add-ons Group'), groupSel);
   const acts = [{ label: 'Cancel', onClick: closeModal },
     { label: 'Save', primary: true, onClick: async () => {

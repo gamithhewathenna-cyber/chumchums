@@ -6,6 +6,9 @@ const el = (tag, attrs = {}, ...kids) => {
     if (k === 'class') e.className = v;
     else if (k === 'html') e.innerHTML = v;
     else if (k.startsWith('on')) e.addEventListener(k.slice(2).toLowerCase(), v);
+    // Boolean IDL props (selected/checked/disabled/readOnly) must be set as DOM properties, not
+    // via setAttribute — setAttribute(k, false) still marks the attribute present ("false" is a string).
+    else if (k === 'selected' || k === 'checked' || k === 'disabled' || k === 'readOnly') e[k] = !!v;
     else if (v !== null && v !== undefined) e.setAttribute(k, v);
   }
   kids.flat().forEach(k => e.append(k?.nodeType ? k : document.createTextNode(k ?? '')));
