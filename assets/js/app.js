@@ -220,12 +220,12 @@ VIEWS.dashboard = async (v) => {
 };
 
 // ================= POS / NEW ORDER =================
-let cart = [], cartCat = null, cartMenu = [], cartType = 'dine-in', cartTable = null, cartCustomer = null, cartAddonGroups = [];
+let cart = [], cartCat = null, cartMenu = [], cartType = 'dine-in', cartTable = null, cartCustomer = null, cartAddonGroups = [], cartSearch = '';
 VIEWS.pos = async (v) => {
   const cats = await API.get('/menu/categories');
   cartMenu = await API.get('/menu/items');
   cartAddonGroups = await API.get('/addons/groups');
-  cart = []; cartCat = null;
+  cart = []; cartCat = null; cartSearch = '';
   v.innerHTML = '';
   const wrap = el('div', { class: 'pos' });
   const left = el('div', { class: 'pos-menu' });
@@ -240,6 +240,10 @@ VIEWS.pos = async (v) => {
   tbls.forEach(t => tblSel.append(el('option', { value: t.id }, `${t.name} (${t.status})`)));
   bar.append(el('span', { class: 'muted' }, 'Type:'), typeSel, el('span', { class: 'muted' }, 'Table:'), tblSel);
   left.append(bar);
+
+  const searchBox = el('input', { type: 'text', placeholder: '🔍 Search menu items…', style: 'margin-bottom:10px' });
+  searchBox.addEventListener('input', () => { cartSearch = searchBox.value.trim().toLowerCase(); renderMenu(); });
+  left.append(searchBox);
 
   const catRow = el('div', { class: 'cats' });
   catRow.append(el('div', { class: 'cat-pill active', onClick: e => filterCat(null, e.target) }, 'All'));
@@ -259,7 +263,7 @@ VIEWS.pos = async (v) => {
 };
 function renderMenu() {
   const g = $('#menuGrid'); g.innerHTML = '';
-  cartMenu.filter(m => !cartCat || m.category_id == cartCat).forEach(m => {
+  cartMenu.filter(m => (!cartCat || m.category_id == cartCat) && (!cartSearch || m.name.toLowerCase().includes(cartSearch))).forEach(m => {
     const needsCustomize = m.addon_group_id || (m.variations && m.variations.length);
     const tile = el('div', { class: 'menu-tile' + (m.available ? '' : ' out'),
       onClick: () => m.available && (needsCustomize ? openCustomizeModal(m) : addToCart(m)) });
@@ -662,6 +666,7 @@ VIEWS.menu = async (v) => {
   v.append(toolbar);
 
   let activeCat = 'all';
+  let searchQ = '';
   const selected = new Set();
   const catRow = el('div', { class: 'cats' });
   const pill = (id, label) => el('div', { class: 'cat-pill' + (id === activeCat ? ' active' : ''), onClick: (e) => {
@@ -670,6 +675,10 @@ VIEWS.menu = async (v) => {
   catRow.append(pill('all', 'All'));
   cats.forEach(c => catRow.append(pill(c.id, c.name)));
   v.append(catRow);
+
+  const searchBox = el('input', { type: 'text', placeholder: '🔍 Search menu items…', style: 'max-width:320px;margin-bottom:12px' });
+  searchBox.addEventListener('input', () => { searchQ = searchBox.value.trim().toLowerCase(); renderTable(); });
+  v.append(searchBox);
 
   const bulkBar = el('div', { class: 'toolbar hidden' });
   v.append(bulkBar);
@@ -710,8 +719,8 @@ VIEWS.menu = async (v) => {
 
   function renderTable() {
     card.innerHTML = ''; renderBulkBar();
-    const filtered = activeCat === 'all' ? items : items.filter(i => i.category_id === activeCat);
-    if (!filtered.length) { card.append(el('p', { class: 'muted' }, 'No items in this category')); return; }
+    const filtered = items.filter(i => (activeCat === 'all' || i.category_id === activeCat) && (!searchQ || i.name.toLowerCase().includes(searchQ)));
+    if (!filtered.length) { card.append(el('p', { class: 'muted' }, searchQ ? 'No items match your search' : 'No items in this category')); return; }
     const t = el('table');
     const selectAll = el('input', { type: 'checkbox', id: 'menuSelectAll', style: 'width:auto;margin:0' });
     selectAll.onchange = () => {

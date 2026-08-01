@@ -12,7 +12,7 @@ async function apiPost(path, body) {
   return data;
 }
 
-let CATS = [], ITEMS = [], TABLES = [], CART = [], ACTIVE_CAT = null, ADDON_GROUPS = [];
+let CATS = [], ITEMS = [], TABLES = [], CART = [], ACTIVE_CAT = null, ADDON_GROUPS = [], SEARCH_Q = '';
 const params = new URLSearchParams(location.search);
 const PRESET_TABLE = params.get('table');
 
@@ -42,6 +42,7 @@ async function boot() {
 
   if (params.get('cancelled') === '1') toast('Payment cancelled — you can try again');
 
+  $('#orderSearch').addEventListener('input', (e) => { SEARCH_Q = e.target.value.trim().toLowerCase(); renderMenu(); });
   renderCats(); renderMenu(); renderCart();
   showScreen('scrMenu');
 }
@@ -61,8 +62,8 @@ function renderCats() {
 
 function renderMenu() {
   const g = $('#orderMenuGrid'); g.innerHTML = '';
-  const items = ITEMS.filter(m => ACTIVE_CAT === null || m.category_id === ACTIVE_CAT);
-  if (!items.length) { g.append(el('p', { class: 'muted' }, 'No items in this category')); return; }
+  const items = ITEMS.filter(m => (ACTIVE_CAT === null || m.category_id === ACTIVE_CAT) && (!SEARCH_Q || m.name.toLowerCase().includes(SEARCH_Q)));
+  if (!items.length) { g.append(el('p', { class: 'muted' }, SEARCH_Q ? 'No items match your search' : 'No items in this category')); return; }
   items.forEach(m => {
     const needsCustomize = m.addon_group_id || (m.variations && m.variations.length);
     const tile = el('div', { class: 'menu-tile', onClick: () => needsCustomize ? openCustomizeModal(m) : addToCart(m) });
