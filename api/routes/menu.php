@@ -68,6 +68,12 @@ if ($sub === 'items') {
     json_out(['ok' => true]);
   }
 
+  if ($id && $action === 'addon-group' && $method === 'PATCH') {
+    require_role(['admin','manager']);
+    q("UPDATE menu_items SET addon_group_id=? WHERE id=?", [inp('addon_group_id') ?: null, $id]);
+    json_out(['ok' => true]);
+  }
+
   if ($id && $action === '' && $method === 'PUT') {
     require_role(['admin','manager']);
     $cur = one("SELECT * FROM menu_items WHERE id=?", [$id]);

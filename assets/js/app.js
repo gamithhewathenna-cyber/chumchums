@@ -661,10 +661,20 @@ VIEWS.menu = async (v) => {
       toast('Deleted ' + selected.size + ' item' + (selected.size > 1 ? 's' : ''));
       go('menu');
     });
+    const groupSel = el('select', { style: 'width:auto;min-width:160px' });
+    groupSel.append(el('option', { value: '' }, 'No extras'));
+    groups.forEach(g => groupSel.append(el('option', { value: g.id }, g.name)));
+    const assignGroup = async () => {
+      await Promise.all([...selected].map(id => API.patch(`/menu/items/${id}/addon-group`, { addon_group_id: groupSel.value || null })));
+      toast('Updated ' + selected.size + ' item' + (selected.size > 1 ? 's' : ''));
+      go('menu');
+    };
     bulkBar.append(
       el('span', { class: 'muted' }, `${selected.size} selected`),
       el('button', { class: 'btn sm', onClick: () => setVisibility(1) }, '🌐 Set Website Live'),
       el('button', { class: 'btn sm', onClick: () => setVisibility(0) }, '🏠 Set Only In Restaurant'),
+      groupSel,
+      el('button', { class: 'btn sm', onClick: assignGroup }, '🧩 Assign Add-on Group'),
       el('button', { class: 'btn sm danger', onClick: deleteSelected }, '🗑️ Delete Selected'),
       el('button', { class: 'btn sm ghost', onClick: () => { selected.clear(); renderBulkBar(); $$('.menu-row-check').forEach(c => c.checked = false); $('#menuSelectAll').checked = false; } }, 'Clear'));
   }
