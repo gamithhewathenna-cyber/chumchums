@@ -835,7 +835,45 @@ async function manageAddonExtras(group) {
   }
   modal('Extras — ' + g.name, c, [
     { label: '← Back', onClick: () => { closeModal(); manageAddonGroups(); } },
+    { label: '📋 Bulk Add', onClick: () => { closeModal(); bulkAddExtras(g); } },
     { label: '+ Add Extra', primary: true, onClick: () => { closeModal(); editAddonExtra(g); } },
+  ]);
+}
+function parseBulkExtraLine(line) {
+  const cleaned = line.replace(/[–—]/g, ' ').trim();
+  const m = cleaned.match(/^(.+?)\s+\+?\s*(?:Rs\.?|LKR|\$|₹|£|€)?\s*([\d,]+(?:\.\d{1,2})?)\s*$/i);
+  if (!m) return null;
+  return { name: m[1].trim(), price: parseFloat(m[2].replace(/,/g, '')) };
+}
+function bulkAddExtras(group) {
+  const textarea = el('textarea', { rows: 10,
+    placeholder: 'One extra per line — name then price, e.g.\nHomemade Chilli Paste – +Rs. 150\nFresh Chilli – +Rs. 100\nExtra Chicken – +Rs. 350\nExtra Cheese – +Rs. 250\nExtra Egg – +Rs. 100' });
+  const preview = el('div', { class: 'muted', style: 'margin-top:8px;font-size:13px' });
+  const err = el('div', { class: 'err' });
+  const parse = () => {
+    const lines = textarea.value.split('\n').map(l => l.trim()).filter(Boolean);
+    const parsed = [], failed = [];
+    lines.forEach(line => {
+      const r = parseBulkExtraLine(line);
+      if (r) parsed.push(r); else failed.push(line);
+    });
+    preview.textContent = parsed.length ? `✔ ${parsed.length} extra${parsed.length > 1 ? 's' : ''} ready to add` : '';
+    err.textContent = failed.length ? `Couldn't read: ${failed.join(' · ')}` : '';
+    return parsed;
+  };
+  textarea.addEventListener('input', parse);
+  const c = el('div', {}, el('p', { class: 'muted', style: 'margin-top:0' }, `Adding to "${group.name}"`),
+    el('label', {}, 'Extras — one per line, name then price'), textarea, preview, err);
+  modal('Bulk Add Extras', c, [
+    { label: 'Cancel', onClick: () => { closeModal(); manageAddonExtras(group); } },
+    { label: 'Add Extras', primary: true, onClick: async () => {
+      const parsed = parse();
+      if (!parsed.length) { err.textContent = 'No valid extras to add — check the format'; return; }
+      try {
+        await Promise.all(parsed.map(p => API.post('/addons/groups/' + group.id + '/items', { name: p.name, price: p.price })));
+        closeModal(); toast(`Added ${parsed.length} extra${parsed.length > 1 ? 's' : ''}`); manageAddonExtras(group);
+      } catch (apiErr) { err.textContent = apiErr.message || 'Failed to add extras'; }
+    } }
   ]);
 }
 function editAddonExtra(group, item = {}) {
