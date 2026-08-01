@@ -161,6 +161,7 @@ async function go(id) {
   $$('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === id));
   $('#pageTitle').textContent = NAV.find(n => n.id === id)?.label || id;
   $('#sidebar').classList.remove('open');
+  localStorage.setItem('pos_last_view', id);
   const view = $('#view'); view.innerHTML = '<p class="muted">Loading…</p>';
   try { await VIEWS[id](view); } catch (e) { view.innerHTML = `<p class="err">${e.message}</p>`; }
 }
@@ -171,7 +172,9 @@ async function startApp() {
   $('#userChip').textContent = `${API.user.name} · ${API.user.role}`;
   try { const s = await API.get('/settings'); CUR = s.currency || '$'; applyLogo(s.logo || ''); applyBrandName(s.restaurant_name); } catch {}
   buildNav();
-  go('dashboard');
+  const lastView = localStorage.getItem('pos_last_view');
+  const canResume = lastView && NAV.find(n => n.id === lastView && n.roles.includes(API.user.role));
+  go(canResume ? lastView : 'dashboard');
   pollNotifications();
   setInterval(pollNotifications, 15000);
 }
