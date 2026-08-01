@@ -271,8 +271,8 @@ function openExtrasModal(m) {
   const list = el('div');
   const totalLine = el('div', { class: 'tot-row big', style: 'margin-top:10px' });
   const updateTotal = () => {
-    const extra = group.items.filter(it => selected.has(it.id)).reduce((s, it) => s + it.price, 0);
-    totalLine.innerHTML = ''; totalLine.append(el('span', {}, 'Total'), el('span', {}, money(m.price + extra)));
+    const extra = group.items.filter(it => selected.has(it.id)).reduce((s, it) => s + Number(it.price), 0);
+    totalLine.innerHTML = ''; totalLine.append(el('span', {}, 'Total'), el('span', {}, money(Number(m.price) + extra)));
   };
   group.items.forEach(it => {
     const input = el('input', { type: group.selection_type === 'single' ? 'radio' : 'checkbox', name: 'extras', style: 'width:auto;margin:0' });
@@ -289,7 +289,7 @@ function openExtrasModal(m) {
   modal('Add Extras — ' + m.name, c, [
     { label: 'Cancel', onClick: closeModal },
     { label: 'Add to Cart', primary: true, onClick: () => {
-      const chosen = group.items.filter(it => selected.has(it.id)).map(it => ({ name: it.name, price: it.price }));
+      const chosen = group.items.filter(it => selected.has(it.id)).map(it => ({ name: it.name, price: Number(it.price) }));
       const extraTotal = chosen.reduce((s, it) => s + it.price, 0);
       addToCart(m, chosen.length ? chosen : null, extraTotal);
       closeModal();
@@ -300,7 +300,7 @@ function addToCart(m, modifiers = null, extraPrice = 0) {
   const modKey = modifiers ? JSON.stringify(modifiers) : '';
   const line = cart.find(c => c.menu_item_id === m.id && (c._modKey || '') === modKey);
   if (line) line.qty++;
-  else cart.push({ menu_item_id: m.id, name: m.name, price: m.price + extraPrice, qty: 1, modifiers: modifiers || undefined, _modKey: modKey });
+  else cart.push({ menu_item_id: m.id, name: m.name, price: Number(m.price) + Number(extraPrice), qty: 1, modifiers: modifiers || undefined, _modKey: modKey });
   renderCart();
 }
 function renderCart() {
